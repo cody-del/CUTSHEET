@@ -1,0 +1,9 @@
+{
+  "name": "cut-sheets",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {"node": ">=22"},
+  "scripts": {"start": "node server.mjs", "build": "npm test", "test": "node --test test/*.test.mjs"},
+  "dependencies": {"pdf-lib": "^1.17.1"}
+}
