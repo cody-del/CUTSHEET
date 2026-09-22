@@ -1,0 +1,75 @@
+# Cut Sheets
+
+A manufacturing app for standard and T-post Shutter Smart shutters. It includes saved jobs, opening duplication, fractional-inch or metric entry, opening diagrams, live part calculations, PDF previews, individual cut sheets, combined cutting lists, and JSON backup/restore.
+
+## Run
+
+With Node.js 22 or newer, run `npm install` in this directory once, then `npm start`. In the current workspace, dependencies are already available through the bundled runtime.
+
+Open **http://127.0.0.1:4190/**. Keep that origin consistent: browser storage is separate on `localhost`. The server binds only to the local computer. When run locally, calculations and PDF generation stay on this computer. This app is separate from the marketing website.
+
+Jobs save to localStorage in the active browser. Export a backup before clearing browser data or moving computers. Restore merges by job ID and preserves a newer local revision. Example data is clearly labeled. PDFs use US Letter, start each opening on a new page, paginate long notes, and include quantity, cut size, profile, machining details, and checkboxes. Dimensions retain full precision during calculations and grouping; displayed lengths use 2 decimal places in mm or 4 in inches. No kerf allowance is added.
+
+## Deploy to Netlify
+
+Import the `cut-sheets` GitHub repository into Netlify. The root `netlify.toml` sets Node 22, runs the test suite before every deployment, publishes `public/`, and bundles the calculation/PDF handler from `netlify/functions/api.mjs`. No environment variables or external database are required. The workbook is a JSON module bundled into the function; it is not published as a static asset.
+
+The browser calls `/api/info`, `/api/calculate`, and `/api/pdf` on the same site. On Netlify, opening measurements and job details needed to generate PDFs are processed by Netlify Functions. This app does not write them to a server database or log them. Saved jobs and the uploaded logo remain in localStorage in the current browser; they are not shared between users or devices.
+
+To move jobs from the local app to the hosted site, choose **Settings → Export backup** locally, then **Settings → Import backup** on the live site. Upload your logo again in the live site's Settings. Browser storage is separate for each origin, so choose the stable production URL for everyday work. Deploy preview URLs each have separate storage.
+
+The hosted app has no sign-in or shared job storage. Anyone with the site URL can use the calculator, but they cannot read another browser's saved jobs. Source workbook validation restrictions also apply to hosted PDF downloads.
+
+## Manufacturing scope and validation
+
+**All PDFs are validation drafts. Do not cut from them until representative completed orders have been reconciled with the trusted original workbook and shop practice.** This is a working first version, not production sign-off.
+
+The interface uses a neutral black-and-white layout, collapsible secondary options, and visual panel choices. Select **T-post** under Construction to enter 1–4 cumulative post centerlines from the left edge of the entered size and a panel arrangement for each section. The default is two-piece standard-frame posts. Panels are equal within each section, but separate sections can have different widths. Existing browser jobs remain compatible.
+
+Supported: 1, 2, 3, or 4 equal panels with every left/right split; 3 or 4 inch louvers; six frame types; inside/outside mounts; 4-sided windows, 3-sided windows/doors; one optional divider. The product family is explicitly Shutter Smart. French cuts, double-hung configurations, other material families, custom framing, and specialty accessories are not exposed.
+
+`source/workbook.json` retains the 2,432 cells reachable from the supported outputs, across 18 supporting sheets of the 27-sheet Google Sheets export. Original formulas are preserved. The source program identifies itself as `20170211FCNew`. The app evaluates them with a bounded parser without JavaScript `eval`. Unsupported syntax, unresolved rules, invalid dimensions, or invalid part quantities fail closed. Source workbook warning cells prevent PDF generation. The app does not execute VBA or Apps Script; any original macro behavior remains unverified.
+
+Source: [FRENCH CUT NEW PROGRAM (2)](https://docs.google.com/spreadsheets/d/1FGIwG2DLI-5FSbQ9KTH9_tn0t5dYAbkG/edit).
+
+One specific inherited discrepancy needs review: `PRINT SHEET!H23` branches to `FC CALCULATION!N50` when `CALCULATION!F9=1` (standard frame). For the 36 × 60 inch sample, its louver midpoint is 186.1125 mm while half the 324.1125 mm louver cut is 162.05625 mm. The formula is preserved and the app/PDF explicitly flag the legacy machining value for verification. Other constants, hinge datum, first-hole position, rail choices, assembly allowances, product variants, and decimal display precision need physical/order validation too.
+
+## T-post calculation path
+
+T-post openings have an optional `tposts` object containing `construction` (`two-piece` or `one-piece`), `positions` (1–4 strictly increasing centerlines in inches), and `sections` (one more section than positions, each with left/right panel counts). Each section allows L, R, LL, LR, RR, LLR, LRR, or LLRR. Existing standard openings and backups remain compatible. Positions follow the datum of the entered opening/shutter/outside-frame measurement; original workbook formulas apply the relevant edge deductions.
+
+The backend sets INPUT SCREEN G15 to TP, maps positions to G31/J31/M31/P31 and section panel counts to E31/F31 through Q31/R31, and explicitly sets CALCULATION (2) D13 for post construction. It disables the original equal-all-rails override (CALCULATION Y38 = 2), preserving section-specific lengths. It reads original T Post Cutsheet outputs for louvers, rails, dividers, stiles, frames, posts, tilt rods, and machining positions. Output quantities already include units and are not multiplied a second time. Standard and T-post inputs reset independently on every calculation.
+
+The source reports one ST FRAME item per two-piece post position. Until stock-piece quantity is confirmed, this source quantity is preserved with an explicit fabrication note. Wide louvers labeled WITH ALUMINUM also carry a note because the T-post sheet supplies no aluminum insert cut length. Both notes appear on opening and combined PDFs. These details still need reconciliation before production use.
+
+## Verification
+
+Run `npm test`.
+
+- 1,971 finite saved source values are compared with the evaluator. This tests source parity for the exported snapshot, not recalculation equivalence for every possible job.
+- 288 T-post combinations cover 1–4 posts, both constructions, six frames, three tilt controls, and optional dividers. Position changes are checked against independent source deductions, invalid geometry is rejected, quantities scale exactly once, and grouped parts retain section references.
+- 648 representative frame/size/louver/panel/divider combinations are checked for valid finite parts or explicit source warnings.
+- Quantity scaling, exact grouping, unit relationships, invalid inputs, and circular/unsupported formulas are tested.
+- PDF page sizes, ordinary one-page openings, long-note overflow, and long combined-reference pagination are tested.
+- Browser checks cover fraction entry, invalid measurement handling, duplication/removal of sample openings, persistence, and PDF controls.
+
+The next production milestone is a small set of real reference orders covering single/double/four panels, frames, mounts, three/four inch louvers, and divider rails, with all cut and machining outputs reconciled. Then add specialty configurations as separately verified scopes.
+
+## Files
+
+- `server.mjs`: local server, validation endpoints, PDF download
+- `netlify/functions/api.mjs`: hosted calculation and PDF endpoints
+- `netlify.toml`: tested builds, static hosting, and function configuration
+- `public/`: dependency-free browser interface
+- `engine.mjs`: source-formula parser/evaluator
+- `calculations.mjs`: supported input mapping, part extraction, and source warnings
+- `pdf.mjs`: paginated print layout
+- `test/`: source snapshot parity and behavioral checks
+
+## Preview layout reference
+
+The user-provided panel configuration reference (September 21, 2026) defines the main folding choices: L, R, LR, LL, RR, LLR, LRR, and LLRR. The two common T-post presets are L / T / LR / T / R and LR / T / LR. The bottom-left bypass example (2 right, 2 left) is excluded. Existing saved custom folding layouts remain editable without being relabeled.
+
+`public/layouts.js` owns the shared hinged-panel drawing geometry used in picker thumbnails, opening previews, and PDF schematics. T-post sections restart their own left/right folding groups at the post positions. Angles are illustrative, not hardware-clearance calculations.
+
+The opening schematic occupies a full-width row below the measurements and automatically fits its SVG bounds, preserving the opening aspect ratio on wide T-post jobs. The 106-inch direct-entry cap applies to standard openings only; T-post jobs use original section-width and frame warnings. Post order and opening bounds are checked inline, and invalid positions suppress the drawing until corrected.
