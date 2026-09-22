@@ -1,7 +1,7 @@
 import {FRAME_STYLES,frameStyle,frameNotice} from './public/frames.js';
 import workbook from './source/workbook.json' with {type:'json'};
 import {WorkbookEngine} from './engine.mjs';
-export const VERSION='20170211FCNew / app 0.2';
+export const VERSION='20170211FCNew / app 0.3';
 export const FRAMES={ST:'Standard',DS:'Designer',EX:'Extended',ZF:'Z-frame',TR:'Trim frame',HS:'Hanging strip'};
 export const SCOPE='Standard and T-post Shutter Smart shutters, 3 or 4 inch louvers. Manufacturing validation pending.';
 export const SOURCE_URL='https://docs.google.com/spreadsheets/d/1FGIwG2DLI-5FSbQ9KTH9_tn0t5dYAbkG/edit';

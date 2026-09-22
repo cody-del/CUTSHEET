@@ -27,6 +27,7 @@ export async function createPDF(job,{combined=false,units='mm'}={}){
     text(`${COLORS[o.color]}  /  ${o.louver}" louvers  /  ${o.tilt} tilt`,36,y,10);y-=17;
     text(`${FRAMES[o.frame]}  /  ${o.mount==='I'?'Inside':'Outside'} mount  /  ${o.sides}`,36,y,10);y-=17;
     text(`Input: ${o.sizeMethod==='W'?'opening measurements':o.sizeMethod==='S'?'shutter measurements':'outside frame measurements'}`,36,y,9,regular,muted);y-=24;
+    if(Number.isFinite(result.gap)){text(`Light gap: ${length(result.gap)} ${units}`,36,y+7,10,bold);y-=17;}
     const sx=459,sy=y+22,h=77,w=107,scene=drawing(o),scale=Math.min(w/scene.width,h/scene.height),dx=sx+(w-scene.width*scale)/2,dy=sy+h;
     const tone=hex=>{const v=parseInt(hex.slice(1),16);return hex.length===4?rgb(((v>>8)&15)/15,((v>>4)&15)/15,(v&15)/15):rgb((v>>16)/255,((v>>8)&255)/255,(v&255)/255);};
     for(const shape of scene.shapes){
@@ -48,6 +49,7 @@ export async function createPDF(job,{combined=false,units='mm'}={}){
   }
   if(combined){
     const notes=results.flatMap(({o,result})=>[
+      ...(Number.isFinite(result.gap)?[`${o.name}: light gap ${length(result.gap)} ${units}.`]:[]),
       ...(o.tposts?[`${o.name}: ${configuration(o)}. ${o.tposts.construction} posts. Centerlines from left (${units}): ${o.tposts.positions.map(v=>length(v*25.4)).join(' / ')}.`]:[]),
       ...result.reviewNotes.map(note=>`${o.name}: ${note}`)
     ]);

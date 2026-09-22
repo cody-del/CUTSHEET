@@ -1,6 +1,25 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {calculate} from '../calculations.mjs';
+import liveReference from './reference-2026-09-22.json' with {type:'json'};
+
+test('current Google Sheets example matches unrounded cuts, machining, and light gap',()=>{
+  const actual=calculate(liveReference.opening);
+  assert.deepEqual(actual.warnings,[]);
+  assert.equal(actual.parts.length,liveReference.parts.length);
+  for(const expected of liveReference.parts){
+    const part=actual.parts.find(p=>p.name===expected.name);
+    assert.ok(part,expected.name);
+    assert.equal(part.quantity,expected.quantity);
+    assert.ok(Math.abs(part.length-expected.length)<1e-8,expected.name);
+  }
+  actual.hinges.forEach((value,i)=>assert.ok(Math.abs(value-liveReference.hinges[i])<1e-8));
+  assert.equal(actual.hinges.length,liveReference.hinges.length);
+  for(const[label,value]of Object.entries(liveReference.machining)){
+    assert.ok(Math.abs(actual.machining.find(m=>m.label===label).value-value)<1e-8,label);
+  }
+  assert.ok(Math.abs(actual.gap-liveReference.gap)<1e-8);
+});
 
 // Independent printed reference supplied by the user:
 // FRENCH CUT NEW PROGRAM (2).xlsm - PRINT SHEET - 2026-09-21T194430.054.pdf

@@ -1,0 +1,83 @@
+{
+  "source": "Fresh Google Sheets export, 2026-09-22; original workbook 20170211FCNew",
+  "opening": {
+    "name": "Workbook reference 36.875 x 45",
+    "width": 36.875,
+    "height": 45,
+    "quantity": 1,
+    "left": 1,
+    "right": 1,
+    "frame": "TR",
+    "louver": 4,
+    "mount": "I",
+    "sizeMethod": "S",
+    "sides": "4W",
+    "color": "W",
+    "tilt": "Back",
+    "stile": "Flat",
+    "divider": 0,
+    "notes": ""
+  },
+  "parts": [
+    {
+      "name": "Louvers",
+      "length": 342.0125,
+      "quantity": 20
+    },
+    {
+      "name": "Stile \u00b7 regular",
+      "length": 1093,
+      "quantity": 2
+    },
+    {
+      "name": "Stile \u00b7 flat",
+      "length": 1093,
+      "quantity": 2
+    },
+    {
+      "name": "Top rail",
+      "length": 344.0125,
+      "quantity": 2
+    },
+    {
+      "name": "Bottom rail",
+      "length": 344.0125,
+      "quantity": 2
+    },
+    {
+      "name": "Top frame",
+      "length": 936.625,
+      "quantity": 1
+    },
+    {
+      "name": "Bottom frame",
+      "length": 936.625,
+      "quantity": 1
+    },
+    {
+      "name": "Left frame",
+      "length": 1143,
+      "quantity": 1
+    },
+    {
+      "name": "Right frame",
+      "length": 1143,
+      "quantity": 1
+    },
+    {
+      "name": "Tiltrod",
+      "length": 835,
+      "quantity": 2
+    }
+  ],
+  "hinges": [
+    46,
+    546.5,
+    1047
+  ],
+  "machining": {
+    "First louver hole from stile top": 342.4,
+    "Louver midpoint": 171.00625
+  },
+  "gap": 6.8
+}

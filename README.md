@@ -12,13 +12,19 @@ Jobs save to localStorage in the active browser. Export a backup before clearing
 
 ## Deploy to Netlify
 
-Import the `cut-sheets` GitHub repository into Netlify. The root `netlify.toml` sets Node 22, runs the test suite before every deployment, publishes `public/`, and bundles the calculation/PDF handler from `netlify/functions/api.mjs`. No environment variables or external database are required. The workbook is a JSON module bundled into the function; it is not published as a static asset.
+Import the `cody-del/CUTSHEET` GitHub repository into Netlify. The root `netlify.toml` sets Node 22, runs the test suite before every deployment, publishes `public/`, and bundles the calculation/PDF handler from `netlify/functions/api.mjs`. No environment variables or external database are required. The workbook is a JSON module bundled into the function; it is not published as a static asset.
 
 The browser calls `/api/info`, `/api/calculate`, and `/api/pdf` on the same site. On Netlify, opening measurements and job details needed to generate PDFs are processed by Netlify Functions. This app does not write them to a server database or log them. Saved jobs and the uploaded logo remain in localStorage in the current browser; they are not shared between users or devices.
 
 To move jobs from the local app to the hosted site, choose **Settings → Export backup** locally, then **Settings → Import backup** on the live site. Upload your logo again in the live site's Settings. Browser storage is separate for each origin, so choose the stable production URL for everyday work. Deploy preview URLs each have separate storage.
 
 The hosted app has no sign-in or shared job storage. Anyone with the site URL can use the calculator, but they cannot read another browser's saved jobs. Source workbook validation restrictions also apply to hosted PDF downloads.
+
+## Measurement basis and light gap
+
+New openings default to **Shutter size**, matching the original workbook’s current `S` input (`SHUTTER FRM` on the print sheet). The measurement-type control sits beside width and height. Existing saved openings keep their original basis. Choose **Window opening size** only when entering window measurements that still need the workbook’s fitting deductions; mount position is a separate setting. For the 36.875 × 45 inch trim-frame Inside reference, selecting Window opening instead of Shutter size shortens louvers/rails by 3.175 mm and stiles/frames by 6.35 mm.
+
+Light gap comes directly from the original workbook output (`PRINT SHEET!L9` or `T Post Cutsheet!L8`), and appears in the editor, cut-sheet preview, individual PDF, and combined PDF. It follows the selected output units. Calculations retain the unrounded value.
 
 ## Manufacturing scope and validation
 
@@ -46,6 +52,7 @@ The source reports one ST FRAME item per two-piece post position. Until stock-pi
 
 Run `npm test`.
 
+- The September 22 Google Sheets reference checks unrounded cuts, quantities, hinges, machining, and light gap. The Inside / Shutter size / Trim / Back tilt / 36.875 × 45 inch example matches all outputs, including a 6.8 mm light gap. The earlier 37.875 × 52.5 inch printed reference remains covered.
 - 1,971 finite saved source values are compared with the evaluator. This tests source parity for the exported snapshot, not recalculation equivalence for every possible job.
 - 288 T-post combinations cover 1–4 posts, both constructions, six frames, three tilt controls, and optional dividers. Position changes are checked against independent source deductions, invalid geometry is rejected, quantities scale exactly once, and grouped parts retain section references.
 - 648 representative frame/size/louver/panel/divider combinations are checked for valid finite parts or explicit source warnings.

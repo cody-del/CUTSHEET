@@ -62,3 +62,5 @@
 .logo-preview>img{max-width:100%;max-height:100%;object-fit:contain}.logo-preview>span{display:flex;align-items:center;gap:10px;font-size:20px}.logo-preview .icon{width:26px;height:26px}
 .settings-card .logo-filename{margin:0 0 12px;font-size:11px;overflow-wrap:anywhere}.settings-card .logo-help{margin:12px 0 0;font-size:11px}.branding-settings .btn-row{gap:16px}
 @media(max-width:640px){.brand-logo{max-width:130px;max-height:38px}.wordmark:has(.brand-logo){min-width:0;flex-shrink:1}}
+
+.measurement-basis{margin:0 0 16px;max-width:560px}.measurement-basis .field-help{margin-top:8px;line-height:1.6}.light-gap{display:flex;align-items:baseline;gap:14px;font-size:12px;margin:12px 0;color:#666}.light-gap strong{font-size:15px;color:#151515;font-weight:650}
