@@ -1,7 +1,7 @@
 import {FRAME_STYLES,frameStyle,frameNotice} from './public/frames.js';
 import workbook from './source/workbook.json' with {type:'json'};
 import {WorkbookEngine} from './engine.mjs';
-export const VERSION='20170211FCNew / app 0.3';
+export const VERSION='20170211FCNew / app 0.4';
 export const FRAMES={ST:'Standard',DS:'Designer',EX:'Extended',ZF:'Z-frame',TR:'Trim frame',HS:'Hanging strip'};
 export const SCOPE='Standard and T-post Shutter Smart shutters, 3 or 4 inch louvers. Manufacturing validation pending.';
 export const SOURCE_URL='https://docs.google.com/spreadsheets/d/1FGIwG2DLI-5FSbQ9KTH9_tn0t5dYAbkG/edit';
@@ -41,6 +41,7 @@ export function validateOpening(o){
   if(![3,4].includes(o.louver))throw new ValidationError('Choose 3 or 4 inch louvers.');
   for(const [key,allowed]of Object.entries({mount:['I','O'],sizeMethod:['W','S','F'],sides:['4W','3W','3D'],color:['W','OW','SC'],tilt:['Smart','Front','Back'],stile:['Flat','Reg']}))if(!allowed.includes(o[key]))throw new ValidationError(`Invalid ${key}.`);
   if(o.sizeMethod==='F'&&o.mount!=='O')throw new ValidationError('Outside frame measurements require an outside mount.');
+  if(o.divisionMode!==undefined&&!['divider','split'].includes(o.divisionMode))throw new ValidationError('Choose divider rail or split tilt rod mode.');
   numeric(o.divider??0,'Divider position',0,o.height);
   if(o.divider>=o.height)throw new ValidationError('The divider must be below the top of the opening.');
   if(clean(o.name).length>80||clean(o.notes).length>1200)throw new ValidationError('Opening name or notes are too long.');
@@ -50,7 +51,7 @@ function openingEngine(o){
   const controls={A15:1,B15:o.quantity,C15:o.color,D15:o.louver,E15:o.tilt,F15:o.mount,G15:hasTposts(o)?'TP':'SF',H15:o.frame,I15:o.sides,J15:o.sizeMethod,K15:o.width,L15:o.height,M15:hasTposts(o)?o.tposts.sections.reduce((n,s)=>n+s.left,0):o.left,N15:hasTposts(o)?o.tposts.sections.reduce((n,s)=>n+s.right,0):o.right,O15:o.divider??0,P15:0,Q15:'',R15:'White',S15:o.stile,T15:'',G31:0,J31:0,M31:0,P31:0,W5:0,W6:0,W7:0,W8:0,W9:0,W14:0};
   const overrides=Object.fromEntries(Object.entries(controls).map(([c,v])=>['INPUT SCREEN!'+c,v]));
   // Product family is explicit; never inherit a prior job's specialty settings.
-  Object.assign(overrides,{'CALCULATION!J29':1,'CALCULATION!H15':1,'CALCULATION!P1':1,'DATA ENTRY CALC!B15':false});
+  Object.assign(overrides,{'CALCULATION!J29':1,'CALCULATION!H15':o.divisionMode==='split'?2:1,'CALCULATION!P1':1,'DATA ENTRY CALC!B15':false});
   // Clear every T-post input on every request; section data must not leak between jobs.
   for(const c of ['E31','F31','G31','H31','I31','J31','K31','L31','M31','N31','O31','P31','Q31','R31'])overrides['INPUT SCREEN!'+c]=0;
   Object.assign(overrides,{'CALCULATION!Y38':2,'CALCULATION (2)!D13':hasTposts(o)&&o.tposts.construction==='one-piece'?1:2});

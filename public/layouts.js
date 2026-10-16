@@ -53,7 +53,7 @@ export function drawing(o){
     const edge=(u,v)=>[lerp(x1,x2,u),lerp(top+4,bottom-4,v)+lerp(d1,d2,u)];
     polygon([edge(.1,.06),edge(.9,.06),edge(.9,.94),edge(.1,.94)],'#fafafa','#aaa',.5);
     for(let l=1;l<=12;l++){const v=.08+l*.84/13;line(edge(.13,v),edge(.87,v),'#aaa',.55);line(edge(.13,v+.014),edge(.87,v+.014),'#ddd',.4);}
-    if(o.divider>0&&o.divider<o.height){const v=1-o.divider/o.height;polygon([edge(.01,v-.025),edge(.99,v-.025),edge(.99,v+.025),edge(.01,v+.025)],'#fff','#999',.55);}
+    if(o.divisionMode!=='split'&&o.divider>0&&o.divider<o.height){const v=1-o.divider/o.height;polygon([edge(.01,v-.025),edge(.99,v-.025),edge(.99,v+.025),edge(.01,v+.025)],'#fff','#999',.55);}
     if(o.tilt==='Front'){
       // An opaque rod sits in front of the louvers and follows each leaf's perspective.
       // A divider rail separates the upper and lower louver controls.

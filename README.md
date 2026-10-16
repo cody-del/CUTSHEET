@@ -40,6 +40,14 @@ Source: [FRENCH CUT NEW PROGRAM (2)](https://docs.google.com/spreadsheets/d/1FGI
 
 One specific inherited discrepancy needs review: `PRINT SHEET!H23` branches to `FC CALCULATION!N50` when `CALCULATION!F9=1` (standard frame). For the 36 × 60 inch sample, its louver midpoint is 186.1125 mm while half the 324.1125 mm louver cut is 162.05625 mm. The formula is preserved and the app/PDF explicitly flag the legacy machining value for verification. Other constants, hinge datum, first-hole position, rail choices, assembly allowances, product variants, and decimal display precision need physical/order validation too.
 
+## October 16 reference audit
+
+A fresh download of the original Excel file matches all 2,432 retained source cells. Four additional printed orders are covered in `test/printed-reference-cases.mjs`: standard 22.125 × 21.5 and 47 × 37.5, and T-post 72.625 × 49 and 72.75 × 61.5. The tests compare every listed length, quantity, profile, hinge position, machining value and light gap at the original print precision. The earlier standard 37.875 × 52.5 reference remains covered.
+
+The 72.75 × 61.5 T-post printout has a 1,242 mm tilt rod. The default workbook mode gives 1,260 mm. Selecting the original split tilt-rod mode (`CALCULATION!H15=2`) reproduces 1,242 mm without changing any cut formula. The app now exposes `divisionMode` (`divider` or `split`) under Finish & other options. Existing jobs default to `divider`. In split mode the optional `divider` measurement becomes the split position; no divider rail is cut or drawn. With a blank split position, the original split-mode end allowance still applies. The original PDF does not print this setting, so the inferred mode needs operator confirmation; do not infer it from height or silently change existing jobs.
+
+The 47 × 37.5 standard reference prints a 332.6 mm louver midpoint for a 470.6 mm louver. This matches `PRINT SHEET!H23`, which takes the standard-frame branch into `FC CALCULATION!N50`; it is not half the louver length (235.3 mm). The app preserves and flags this inherited value pending a confirmed machining datum. Printed reference parity does not verify macros, physical fitting or every specialty configuration.
+
 ## T-post calculation path
 
 T-post openings have an optional `tposts` object containing `construction` (`two-piece` or `one-piece`), `positions` (1–4 strictly increasing centerlines in inches), and `sections` (one more section than positions, each with left/right panel counts). Each section allows L, R, LL, LR, RR, LLR, LRR, or LLRR. Existing standard openings and backups remain compatible. Positions follow the datum of the entered opening/shutter/outside-frame measurement; original workbook formulas apply the relevant edge deductions.

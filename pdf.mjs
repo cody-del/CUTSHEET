@@ -24,7 +24,7 @@ export async function createPDF(job,{combined=false,units='mm'}={}){
     const {o,result}=results[index];openingLabel=`${String(index+1).padStart(2,'0')} ${o.name||'Untitled opening'}`;newPage('Opening cut sheet');
     const nameLines=wrap(`${String(index+1).padStart(2,'0')}  ${o.name||'Untitled opening'}`,350,16,bold);nameLines.forEach((s,i)=>text(s,36,y-i*19,16,bold));y-=nameLines.length*19+2;
     text(`${o.width}" W x ${o.height}" H   /   ${o.quantity} unit${o.quantity===1?'':'s'}${o.tposts?'':`   /   ${configuration(o)}`}`,36,y,10);y-=17;
-    text(`${COLORS[o.color]}  /  ${o.louver}" louvers  /  ${o.tilt} tilt`,36,y,10);y-=17;
+    text(`${COLORS[o.color]}  /  ${o.louver}" louvers  /  ${o.tilt} tilt${o.divisionMode==='split'?'  /  Split rod mode':''}`,36,y,10);y-=17;
     text(`${FRAMES[o.frame]}  /  ${o.mount==='I'?'Inside':'Outside'} mount  /  ${o.sides}`,36,y,10);y-=17;
     text(`Input: ${o.sizeMethod==='W'?'opening measurements':o.sizeMethod==='S'?'shutter measurements':'outside frame measurements'}`,36,y,9,regular,muted);y-=24;
     if(Number.isFinite(result.gap)){text(`Light gap: ${length(result.gap)} ${units}`,36,y+7,10,bold);y-=17;}
@@ -49,6 +49,7 @@ export async function createPDF(job,{combined=false,units='mm'}={}){
   }
   if(combined){
     const notes=results.flatMap(({o,result})=>[
+      ...(o.divisionMode==='split'?[`${o.name}: split tilt-rod mode${o.divider?`; split from bottom ${length(o.divider*25.4)} ${units}`:''}.`]:[]),
       ...(Number.isFinite(result.gap)?[`${o.name}: light gap ${length(result.gap)} ${units}.`]:[]),
       ...(o.tposts?[`${o.name}: ${configuration(o)}. ${o.tposts.construction} posts. Centerlines from left (${units}): ${o.tposts.positions.map(v=>length(v*25.4)).join(' / ')}.`]:[]),
       ...result.reviewNotes.map(note=>`${o.name}: ${note}`)
