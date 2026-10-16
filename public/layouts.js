@@ -17,7 +17,7 @@ export const TPOST_LAYOUTS=[
     sections:Array.from({length:count},()=>({left:1,right:1}))
   }))
 ];
-export function drawing(o){
+export function drawing(o,{louverLayout}={}){
   const shapes=[],left=22,top=28,width=214,height=Math.max(24,width*(o.height||60)/(o.width||48)),bottom=top+height;
   const line=(a,b,tone='#999',weight=.65)=>shapes.push({kind:'line',a,b,tone,weight});
   const polygon=(points,fill='#fff',tone='#777',weight=.8)=>shapes.push({kind:'polygon',points,fill,tone,weight});
@@ -52,12 +52,31 @@ export function drawing(o){
     polygon(points,'#fff','#666');
     const edge=(u,v)=>[lerp(x1,x2,u),lerp(top+4,bottom-4,v)+lerp(d1,d2,u)];
     polygon([edge(.1,.06),edge(.9,.06),edge(.9,.94),edge(.1,.94)],'#fafafa','#aaa',.5);
-    for(let l=1;l<=12;l++){const v=.08+l*.84/13;line(edge(.13,v),edge(.87,v),'#aaa',.55);line(edge(.13,v+.014),edge(.87,v+.014),'#ddd',.4);}
-    if(o.divisionMode!=='split'&&o.divider>0&&o.divider<o.height){const v=1-o.divider/o.height;polygon([edge(.01,v-.025),edge(.99,v-.025),edge(.99,v+.025),edge(.01,v+.025)],'#fff','#999',.55);}
+    const hasDivision=o.divider>0&&o.divider<o.height;
+    const actualCenter=louverLayout?.dividerFromBottom,louverHeight=louverLayout?.panelHeight;
+    const split=hasDivision?Math.max(.075,Math.min(.925,Number.isFinite(actualCenter)&&louverHeight>0?1-actualCenter/louverHeight:1-o.divider/o.height)):null;
+    const railHalf=o.divisionMode==='split'?0:.025;
+    const spans=split===null?[[.06,.94,louverLayout?.total??(louverLayout===undefined?12:0),'full']]:[
+      [.06,split-railHalf,louverLayout?.top??(louverLayout===undefined?Math.round(12*split):0),'top'],
+      [split+railHalf,.94,louverLayout?.bottom??(louverLayout===undefined?Math.round(12*(1-split)):0),'bottom']
+    ];
+    leaf.louvers=[];
+    for(const [start,end,count,group]of spans){
+      const pitch=(end-start)/Math.max(1,count);
+      for(let l=0;l<count;l++){
+        const a=start+(l+.16)*pitch,b=start+(l+.84)*pitch;
+        polygon([edge(.1,a),edge(.9,a),edge(.9,b),edge(.1,b)],'#fff','#aaa',.45);
+        Object.assign(shapes.at(-1),{role:'louver',group,section:leaf.section});
+        leaf.louvers.push({group,points:shapes.at(-1).points});
+      }
+    }
+    if(split!==null&&o.divisionMode!=='split'){
+      polygon([edge(.1,split-railHalf),edge(.9,split-railHalf),edge(.9,split+railHalf),edge(.1,split+railHalf)],'#eee','#777',.65);
+      Object.assign(shapes.at(-1),{role:'divider',section:leaf.section});
+    }
     if(o.tilt==='Front'){
       // An opaque rod sits in front of the louvers and follows each leaf's perspective.
       // A divider rail separates the upper and lower louver controls.
-      const split=o.divider>0&&o.divider<o.height?1-o.divider/o.height:null;
       const spans=split===null?[[.1,.9]]:[[.1,Math.min(.9,split-.04)],[Math.max(.1,split+.04),.9]];
       for(const [start,end]of spans)if(end>start){
         polygon([edge(.46,start),edge(.54,start),edge(.54,end),edge(.46,end)],'#fff','#555',.8);
@@ -70,10 +89,10 @@ export function drawing(o){
   }
   return {width:260,height:bottom+Math.max(0,...leaves.map(l=>Math.max(l.d1,l.d2)))+36,shapes,leaves,posts,bounds:{left,top,width,height}};
 }
-export function drawingSVG(o,{thumbnail=false,widthLabel='',heightLabel=''}={}){
-  const d=drawing(o),f=n=>Number(n.toFixed(3)),point=p=>p.map(f).join(',');
+export function drawingSVG(o,{thumbnail=false,widthLabel='',heightLabel='',louverLayout}={}){
+  const d=drawing(o,{louverLayout}),f=n=>Number(n.toFixed(3)),point=p=>p.map(f).join(',');
   const paths=d.shapes.map(s=>s.kind==='polygon'?`<polygon points="${s.points.map(point).join(' ')}" fill="${s.fill}" stroke="${s.tone}" stroke-width="${s.weight}"/>`:`<line x1="${f(s.a[0])}" y1="${f(s.a[1])}" x2="${f(s.b[0])}" y2="${f(s.b[1])}" stroke="${s.tone}" stroke-width="${s.weight}"/>`).join('');
   const escape=v=>String(v).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const code=o.tposts?o.tposts.sections.map(s=>'L'.repeat(s.left)+'R'.repeat(s.right)).join(' | T | '):'L'.repeat(o.left)+'R'.repeat(o.right);
-  return `<svg class="${thumbnail?'layout-drawing':'diagram'}" viewBox="0 0 ${d.width} ${f(d.height)}" preserveAspectRatio="xMidYMid meet" ${thumbnail?'aria-hidden="true"':`role="img" aria-label="${escape(frameStyle(o).name)}; Folding layout ${escape(code)}; ${escape(widthLabel)} wide by ${escape(heightLabel)} tall"`}>${paths}${thumbnail?'':`<text x="130" y="13" text-anchor="middle" font-size="9" fill="#666">${escape(widthLabel)}</text><text x="250" y="${f(d.bounds.top+d.bounds.height/2)}" text-anchor="middle" font-size="9" fill="#666" transform="rotate(90 250 ${f(d.bounds.top+d.bounds.height/2)})">${escape(heightLabel)}</text><text x="130" y="${f(d.height-10)}" text-anchor="middle" font-size="9" fill="#555">${escape(code)}</text>`}</svg>`;
+  return `<svg class="${thumbnail?'layout-drawing':'diagram'}" viewBox="0 0 ${d.width} ${f(d.height)}" preserveAspectRatio="xMidYMid meet" ${thumbnail?'aria-hidden="true"':`role="img" aria-label="${escape(frameStyle(o).name)}; Folding layout ${escape(code)}; ${escape(widthLabel)} wide by ${escape(heightLabel)} tall${louverLayout?`; ${louverLayout.divided?`${louverLayout.top} louvers above, ${louverLayout.bottom} below`:`${louverLayout.total} louvers per panel`}`:''}"`}>${paths}${thumbnail?'':`<text x="130" y="13" text-anchor="middle" font-size="9" fill="#666">${escape(widthLabel)}</text><text x="250" y="${f(d.bounds.top+d.bounds.height/2)}" text-anchor="middle" font-size="9" fill="#666" transform="rotate(90 250 ${f(d.bounds.top+d.bounds.height/2)})">${escape(heightLabel)}</text><text x="130" y="${f(d.height-10)}" text-anchor="middle" font-size="9" fill="#555">${escape(code)}</text>`}</svg>`;
 }

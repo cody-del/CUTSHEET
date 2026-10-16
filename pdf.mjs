@@ -1,61 +1,115 @@
 import {drawing} from './public/layouts.js';
+import {cutSheetFacts,cutSheetNotes,louverSummary,machiningLabel} from './public/cut-sheet.js';
 import {PDFDocument,StandardFonts,rgb} from 'pdf-lib';
-import {calculate,combinedParts,FRAMES,VERSION,ValidationError,configuration} from './calculations.mjs';
+import {calculate,combinedParts,ValidationError,configuration} from './calculations.mjs';
 const COLORS={W:'White',OW:'Off-white',SC:'Swiss coffee'};
-const ascii=s=>String(s??'').normalize('NFKD').replace(/[“”]/g,'"').replace(/[‘’]/g,"'").replace(/[–—·]/g,'-').replace(/[^\x20-\x7e\n]/g,'');
+const ascii=s=>String(s??'').normalize('NFKD').replace(/×/g,'x').replace(/[“”]/g,'"').replace(/[‘’]/g,"'").replace(/·/g,'  ').replace(/[–—]/g,'-').replace(/[^\x20-\x7e\n]/g,'');
 export async function createPDF(job,{combined=false,units='mm'}={}){
   if(!job||!Array.isArray(job.openings)||job.openings.length<1||job.openings.length>100)throw new ValidationError('Add between 1 and 100 openings.');
   const results=job.openings.map(o=>({o,result:calculate(o)}));
   for(const {o,result}of results)if(result.warnings.length)throw new ValidationError(`${o.name}: ${result.warnings.join('; ')}`);
-  const pdf=await PDFDocument.create();const regular=await pdf.embedFont(StandardFonts.Helvetica),bold=await pdf.embedFont(StandardFonts.HelveticaBold);
+  const pdf=await PDFDocument.create(),regular=await pdf.embedFont(StandardFonts.Helvetica),bold=await pdf.embedFont(StandardFonts.HelveticaBold);
   pdf.setTitle(`${job.number||'Job'} - ${combined?'Combined cutting list':'Cut sheets'}`);pdf.setAuthor('Cut sheet');
-  const ink=rgb(.08,.08,.08),muted=rgb(.4,.4,.4),green=rgb(.08,.08,.08),pale=rgb(.97,.97,.97),line=rgb(.8,.8,.8);
+  const ink=rgb(.08,.08,.08),muted=rgb(.4,.4,.4),pale=rgb(.95,.95,.95),white=rgb(1,1,1),line=rgb(.87,.87,.87);
+  const margin=32,width=548,floor=54,length=n=>units==='in'?(n/25.4).toFixed(4):n.toFixed(2);
   let page,y,openingLabel='';
-  function text(s,x,yy,size=10,font=regular,color=ink){page.drawText(ascii(s),{x,y:yy,size,font,color});}
-  function wrap(s,width,size=9,font=regular){const lines=[];for(const paragraph of ascii(s).split('\n')){let current='';for(const word of paragraph.split(/\s+/)){if(font.widthOfTextAtSize(word,size)>width){if(current){lines.push(current);current='';}let part='';for(const ch of word){if(font.widthOfTextAtSize(part+ch,size)>width){lines.push(part);part='';}part+=ch;}current=part;continue;}if(current&&font.widthOfTextAtSize(current+' '+word,size)>width){lines.push(current);current=word;}else current+=(current?' ':'')+word;}lines.push(current);}return lines;}
-  function rect(x,yy,w,h,color){page.drawRectangle({x,y:yy,width:w,height:h,color});}
-  function newPage(title){page=pdf.addPage([612,792]);rect(0,782,612,10,green);text('CUT SHEET',36,750,10,bold,green);text(title,36,719,24,bold);const headerLines=wrap(`${job.number||'Unnumbered job'}  /  ${job.customer||'Customer not entered'}`,540,9);headerLines.forEach((line,i)=>text(line,36,700-i*10,9));const headerExtra=Math.max(0,headerLines.length-1)*10;text(`PRINTED ${new Intl.DateTimeFormat('en-CA',{timeZone:'America/New_York'}).format(new Date())}`,430,750,8,regular,muted);rect(36,659-headerExtra,540,23,rgb(.94,.94,.94));text('VALIDATION DRAFT - Compare with a trusted cut sheet before cutting.',45,667-headerExtra,9,bold);y=642-headerExtra;if(openingLabel&&title.includes('continued')){for(const labelLine of wrap(openingLabel,540,10,bold)){text(labelLine,36,y,10,bold);y-=14;}y-=8;}}
-  function rule(){page.drawLine({start:{x:36,y},end:{x:576,y},thickness:.6,color:line});}
-  const length=n=>units==='in'?(n/25.4).toFixed(4):n.toFixed(2);
-  function tableHeader(isCombined){rect(36,y-22,540,24,green);text('PART / PROFILE',45,y-14,8,bold,rgb(1,1,1));text('QTY',330,y-14,8,bold,rgb(1,1,1));text(`CUT (${units})`,390,y-14,8,bold,rgb(1,1,1));text(isCombined?'OPENINGS':'CHECK',478,y-14,8,bold,rgb(1,1,1));y-=24;}
-  function partRow(part,isCombined,referenceLines=null){const sub=wrap(part.profile,267,8),refs=referenceLines??(isCombined?wrap(part.openings.map(x=>`${x.name} (${x.quantity})`).join(', '),87,7):[]);if(refs.length>18){for(let i=0;i<refs.length;i+=18)partRow({...part,name:part.name+(i?' (continued)':''),quantity:i?'':part.quantity},isCombined,refs.slice(i,i+18));return;}const height=Math.max(31,22+sub.length*8,14+refs.length*10);if(y-height<68){newPage('Cutting list / continued');tableHeader(isCombined);}if(Math.round(y)%2===0)rect(36,y-height,540,height,pale);text(part.name+(part.section?` / section ${part.section}`:''),45,y-12,10,bold);sub.forEach((s,i)=>text(s,45,y-24-i*8,8,regular,muted));text(part.quantity,335,y-16,11,bold);text(length(part.length),390,y-16,11,bold);if(isCombined)refs.forEach((s,i)=>text(s,478,y-16-i*10,7));else page.drawRectangle({x:490,y:y-21,width:11,height:11,borderWidth:.7,borderColor:line});y-=height;rule();}
-  if(combined){newPage('Combined cutting list');text(`${job.openings.length} openings  |  Parts grouped by exact size, profile and finish`,36,y,9,regular,muted);y-=22;tableHeader(true);for(const part of combinedParts(job.openings))partRow({...part,profile:`${COLORS[part.color]} / ${part.profile}`},true);}
-  else for(let index=0;index<results.length;index++){
-    const {o,result}=results[index];openingLabel=`${String(index+1).padStart(2,'0')} ${o.name||'Untitled opening'}`;newPage('Opening cut sheet');
-    const nameLines=wrap(`${String(index+1).padStart(2,'0')}  ${o.name||'Untitled opening'}`,350,16,bold);nameLines.forEach((s,i)=>text(s,36,y-i*19,16,bold));y-=nameLines.length*19+2;
-    text(`${o.width}" W x ${o.height}" H   /   ${o.quantity} unit${o.quantity===1?'':'s'}${o.tposts?'':`   /   ${configuration(o)}`}`,36,y,10);y-=17;
-    text(`${COLORS[o.color]}  /  ${o.louver}" louvers  /  ${o.tilt} tilt${o.divisionMode==='split'?'  /  Split rod mode':''}`,36,y,10);y-=17;
-    text(`${FRAMES[o.frame]}  /  ${o.mount==='I'?'Inside':'Outside'} mount  /  ${o.sides}`,36,y,10);y-=17;
-    text(`Input: ${o.sizeMethod==='W'?'opening measurements':o.sizeMethod==='S'?'shutter measurements':'outside frame measurements'}`,36,y,9,regular,muted);y-=24;
-    if(Number.isFinite(result.gap)){text(`Light gap: ${length(result.gap)} ${units}`,36,y+7,10,bold);y-=17;}
-    const sx=459,sy=y+22,h=77,w=107,scene=drawing(o),scale=Math.min(w/scene.width,h/scene.height),dx=sx+(w-scene.width*scale)/2,dy=sy+h;
+  function text(s,x,yy,size=9,font=regular,color=ink){page.drawText(ascii(s),{x,y:yy,size,font,color});}
+  function wrap(s,w,size=9,font=regular){const lines=[];for(const paragraph of ascii(s).split('\n')){let current='';for(const word of paragraph.split(/\s+/)){if(font.widthOfTextAtSize(word,size)>w){if(current){lines.push(current);current='';}let part='';for(const ch of word){if(font.widthOfTextAtSize(part+ch,size)>w){lines.push(part);part='';}part+=ch;}current=part;continue;}if(current&&font.widthOfTextAtSize(current+' '+word,size)>w){lines.push(current);current=word;}else current+=(current?' ':'')+word;}lines.push(current);}return lines;}
+  function rect(x,yy,w,h,color,border=false){page.drawRectangle({x,y:yy,width:w,height:h,color,...(border?{borderColor:line,borderWidth:.5}:{})});}
+  function newPage(title=''){
+    page=pdf.addPage([612,792]);text('CUT SHEET',margin,759,9,bold);text(new Intl.DateTimeFormat('en-CA',{timeZone:'America/New_York'}).format(new Date()),519,759,8,regular,muted);
+    const jobLines=wrap(`${job.number||'Unnumbered job'}${job.customer?'   '+job.customer:''}`,width,9);
+    jobLines.forEach((l,i)=>text(l,margin,742-i*11,9,regular,muted));y=724-(jobLines.length-1)*11;
+    if(title){for(const l of wrap(title,width,16,bold)){text(l,margin,y,16,bold);y-=20;}}
+  }
+  function ensure(height,title='continued'){if(y-height<floor)newPage(`${openingLabel?openingLabel+'  ':''}${title}`);}
+  function paragraph(value,{size=8.5,boldText=false}={}){
+    const font=boldText?bold:regular;
+    for(const l of wrap(value,width,size,font)){ensure(size+5);text(l,margin,y-size,size,font);y-=size+4;}y-=3;
+  }
+  function facts(items,{x=margin,w=width,columns=2,compact=false,dense=false}={}){
+    const gap=5,cw=(w-gap*(columns-1))/columns,size=compact?8.2:9,start=y;
+    for(let i=0;i<items.length;i+=columns){
+      const group=items.slice(i,i+columns).map(([label,value])=>({label:wrap(label,cw-14,7),value:wrap(value,cw-14,size,bold)}));
+      const height=Math.max(...group.map(c=>(dense?7:11)+c.label.length*8+c.value.length*(size+2)));
+      ensure(height+gap,'Machining continued');
+      group.forEach((cell,col)=>{const xx=x+col*(cw+gap);rect(xx,y-height,cw,height,col%2===0?pale:white,true);let yy=y-10;cell.label.forEach(l=>{text(l,xx+7,yy,7,regular,muted);yy-=8;});cell.value.forEach(l=>{text(l,xx+7,yy,size,bold);yy-=size+2;});});
+      y-=height+gap;
+    }
+    return start-y;
+  }
+  function schematic(o,result,x,top,w,h){
+    const scene=drawing(o,{louverLayout:result.louverLayout}),scale=Math.min(w/scene.width,h/scene.height),dx=x+(w-scene.width*scale)/2,dy=top;
     const tone=hex=>{const v=parseInt(hex.slice(1),16);return hex.length===4?rgb(((v>>8)&15)/15,((v>>4)&15)/15,(v&15)/15):rgb((v>>16)/255,((v>>8)&255)/255,(v&255)/255);};
-    for(const shape of scene.shapes){
-      if(shape.kind==='line')page.drawLine({start:{x:dx+shape.a[0]*scale,y:dy-shape.a[1]*scale},end:{x:dx+shape.b[0]*scale,y:dy-shape.b[1]*scale},thickness:shape.weight*scale,color:tone(shape.tone)});
-      else page.drawSvgPath(shape.points.map((p,i)=>`${i?'L':'M'} ${p[0]} ${p[1]}`).join(' ')+' Z',{x:dx,y:dy,scale,color:tone(shape.fill),borderColor:tone(shape.tone),borderWidth:shape.weight});
+    for(const s of scene.shapes){if(s.kind==='line')page.drawLine({start:{x:dx+s.a[0]*scale,y:dy-s.a[1]*scale},end:{x:dx+s.b[0]*scale,y:dy-s.b[1]*scale},thickness:s.weight*scale,color:tone(s.tone)});
+      else page.drawSvgPath(s.points.map((p,i)=>`${i?'L':'M'} ${p[0]} ${p[1]}`).join(' ')+' Z',{x:dx,y:dy,scale,color:tone(s.fill),borderColor:tone(s.tone),borderWidth:s.weight});}
+    wrap(louverSummary(result),w,8).forEach((l,i)=>text(l,x+(w-regular.widthOfTextAtSize(ascii(l),8))/2,top-h-5-i*10,8,regular,muted));
+  }
+  function tableHeader(x,w,yy,small=false,isCombined=false){
+    rect(x,yy-19,w,19,ink);const qty=x+w*(small?.65:.60),cut=x+w*(small?.78:.72);
+    text('PART / PROFILE',x+7,yy-12,7,bold,white);text('QTY',qty,yy-12,7,bold,white);text(`CUT (${units})`,cut,yy-12,7,bold,white);
+    if(isCombined)text('OPENINGS',x+w*.86,yy-12,7,bold,white);
+  }
+  function rowData(p,w,small,isCombined=false){
+    const title=p.name.replace(' · ',' ')+(p.section?`  S${p.section}`:''),nameSize=small?8:9;
+    const name=wrap(title,w*(small?.63:.58)-14,nameSize,bold),profile=wrap(p.profile,w*(small?.63:.58)-14,7);
+    const refs=isCombined?wrap(p.openings.map(o=>`${o.name} (${o.quantity})`).join(', '),w*.14-8,7):[];
+    return {p,name,profile,refs,nameSize,height:Math.max(small?20:22,(small?3:5)+name.length*(nameSize+1)+profile.length*8,refs.length*9+7)};
+  }
+  function row(data,x,w,top,index,small,isCombined=false){
+    const {p,name,profile,refs,nameSize,height}=data;rect(x,top-height,w,height,index%2===0?pale:white);
+    let yy=top-(small?8:10);name.forEach(l=>{text(l,x+7,yy,nameSize,bold);yy-=nameSize+1;});profile.forEach(l=>{text(l,x+7,yy,7,regular,muted);yy-=8;});
+    text(p.quantity,x+w*(small?.65:.60),top-14,small?9:10,bold);text(length(p.length),x+w*(small?.78:.72),top-14,small?9:10,bold);
+    if(isCombined)refs.forEach((l,i)=>text(l,x+w*.86,top-11-i*9,7));
+  }
+  function partTables(parts,isCombined=false){
+    // Longer section lists use two readable columns instead of a mostly empty second page.
+    const columns=!isCombined&&parts.length>16?2:1,gap=12,w=(width-gap*(columns-1))/columns,small=columns===2;
+    const size=Math.ceil(parts.length/columns),groups=Array.from({length:columns},(_,i)=>parts.slice(i*size,(i+1)*size));
+    const top=y;let bottom=y;
+    for(let col=0;col<columns;col++){
+      y=top;const x=margin+col*(w+gap);tableHeader(x,w,y,small,isCombined);y-=19;
+      let index=0;
+      for(const p of groups[col]){
+        const data=rowData(p,w,small,isCombined);
+        // A combined row can carry many room references; keep every reference with its cut.
+        const referenceChunks=isCombined&&data.height>y-floor?Math.max(1,Math.floor((y-floor-8)/9)):data.refs.length;
+        if(isCombined&&data.refs.length>referenceChunks){
+          for(let i=0;i<data.refs.length;i+=referenceChunks){const chunk={...data,refs:data.refs.slice(i,i+referenceChunks),p:{...p,quantity:i?'':p.quantity}};chunk.height=Math.max(22,5+chunk.name.length*(chunk.nameSize+1)+chunk.profile.length*8,chunk.refs.length*9+7);
+            if(y-chunk.height<floor){newPage('Combined cutting list continued');tableHeader(x,w,y,small,true);y-=19;}
+            row(chunk,x,w,y,index++,small,true);y-=chunk.height;
+          }
+        }else{
+          if(y-data.height<floor){newPage(`${openingLabel?openingLabel+'  ':''}Cutting list continued`);tableHeader(x,w,y,small,isCombined);y-=19;}
+          row(data,x,w,y,index++,small,isCombined);y-=data.height;
+        }
+      }
+      bottom=Math.min(bottom,y);
     }
-    text('SCHEMATIC ONLY',462,sy-10,7,regular,muted);
-    if(o.tposts){
-      for(const line of wrap(`${o.tposts.construction==='two-piece'?'Two-piece standard-frame posts':'One-piece T-posts'} / ${configuration(o)}`,540,9)){text(line,36,y,9,bold);y-=13;}
-      for(const line of wrap(`Post centerlines from left (${units}): ${o.tposts.positions.map(v=>length(v*25.4)).join(' / ')}`,540,9)){text(line,36,y,9);y-=13;}
-      y-=8;
-    }
-    tableHeader(false);for(const part of result.parts)partRow(part,false);
-    const details=[`Hinges from stile end (${units}): ${result.hinges.map(length).join(' / ')}`,...result.machining.map(m=>`${m.label} (${units}): ${length(m.value)}`),...result.reviewNotes,o.notes?`Notes: ${o.notes}`:''].filter(Boolean);
-    y-=18;
-    for(const detail of details){for(const l of wrap(detail,540,9)){if(y<78){newPage('Machining / continued');}text(l,36,y,9);y-=13;}y-=4;}
-    if(y<78)newPage('Shop sign-off');y-=10;
-    for(const [i,label]of ['Cut','Machined','Assembled','Inspected'].entries()){const x=36+i*135;page.drawRectangle({x,y:y-1,width:9,height:9,borderWidth:.7,borderColor:muted});text(label,x+15,y,9);}
+    y=bottom-12;
   }
   if(combined){
-    const notes=results.flatMap(({o,result})=>[
-      ...(o.divisionMode==='split'?[`${o.name}: split tilt-rod mode${o.divider?`; split from bottom ${length(o.divider*25.4)} ${units}`:''}.`]:[]),
-      ...(Number.isFinite(result.gap)?[`${o.name}: light gap ${length(result.gap)} ${units}.`]:[]),
-      ...(o.tposts?[`${o.name}: ${configuration(o)}. ${o.tposts.construction} posts. Centerlines from left (${units}): ${o.tposts.positions.map(v=>length(v*25.4)).join(' / ')}.`]:[]),
-      ...result.reviewNotes.map(note=>`${o.name}: ${note}`)
-    ]);
-    if(notes.length){y-=22;for(const note of notes){for(const line of wrap(note,540,9)){if(y<78)newPage('Fabrication notes / continued');text(line,36,y,9);y-=13;}y-=7;}}
+    newPage('Combined cutting list');paragraph(`${job.openings.length} openings. Parts grouped by exact size, profile and finish.`);
+    partTables(combinedParts(job.openings).map(p=>({...p,profile:`${COLORS[p.color]}   ${p.profile}`})),true);
+    for(const {o,result}of results){
+      const notes=[o.divisionMode==='split'?'Split tilt-rod mode':'',Number.isFinite(result.gap)?`Light gap ${length(result.gap)} ${units}`:'',o.tposts?`${configuration(o)}; post centerlines ${o.tposts.positions.map(v=>length(v*25.4)).join(', ')} ${units}`:'',...cutSheetNotes(result),o.notes].filter(Boolean);
+      if(notes.length)paragraph(`${o.name}: ${notes.join('. ')}`);
+    }
+  }else for(let index=0;index<results.length;index++){
+    const {o,result}=results[index];openingLabel=`${String(index+1).padStart(2,'0')}  ${o.name||'Untitled opening'}`;newPage(openingLabel);
+    const top=y;
+    facts(cutSheetFacts(o,result,{length,units}),{w:350,compact:true,dense:result.parts.length>16});
+    schematic(o,result,397,top,183,Math.min(130,top-y-15));
+    y-=5;
+    if(o.tposts)paragraph(`${o.tposts.construction==='two-piece'?'Two-piece':'One-piece'} posts. Centerlines from left (${units}): ${o.tposts.positions.map(v=>length(v*25.4)).join('   ')}`);
+    if(o.divider)paragraph(`${o.divisionMode==='split'?'Split':'Divider'} input from bottom: ${length(o.divider*25.4)} ${units}.`);
+    partTables(result.parts);
+    const machining=[['Hinges from stile end',result.hinges.map(length).join(', ')],...result.machining.map(m=>[machiningLabel(m.label),length(m.value)])];
+    ensure(48,'Machining continued');text(`MACHINING (${units})`,margin,y-8,8,bold);y-=16;
+    facts(machining,{columns:machining.length>6?3:2,compact:true,dense:result.parts.length>16});
+    y-=3;for(const note of cutSheetNotes(result))paragraph(note,{size:8});
+    if(o.notes)paragraph(`Shop notes: ${o.notes}`);
   }
-  const pages=pdf.getPages();pages.forEach((p,i)=>{page=p;page.drawLine({start:{x:36,y:46},end:{x:576,y:46},thickness:.5,color:line});text(`Validation draft / ${VERSION} / lengths ${units} / no kerf allowance`,36,31,7,regular,muted);text(`${i+1} / ${pages.length}`,542,31,8,regular,muted);});
+  const pages=pdf.getPages();pages.forEach((p,i)=>{page=p;page.drawLine({start:{x:margin,y:40},end:{x:580,y:40},thickness:.5,color:line});text(`Cut lengths in ${units}`,margin,27,7,regular,muted);text(`${i+1} / ${pages.length}`,550,27,8,regular,muted);});
   return pdf.save();
 }

@@ -46,7 +46,7 @@ test('648 representative combinations either calculate valid parts or expose wor
 test('ordinary openings fit one Letter page each; long notes and combined references paginate',async()=>{
  const j={number:'TEST-001',customer:'Example',openings:[base,{...base,name:'Second',height:72}]};
  const pdf=await PDFDocument.load(await createPDF(j));assert.equal(pdf.getPageCount(),2);assert.equal(pdf.getPage(0).getWidth(),612);assert.equal(pdf.getPage(0).getHeight(),792);
- const long=await PDFDocument.load(await createPDF({...j,openings:[{...base,notes:'Assembly note '.repeat(70)}]}));assert.ok(long.getPageCount()>1);
+ const long=await PDFDocument.load(await createPDF({...j,openings:[{...base,notes:'Assembly note\n'.repeat(70)}]}));assert.ok(long.getPageCount()>1);
  const combined=await PDFDocument.load(await createPDF({...j,openings:Array.from({length:50},(_,i)=>({...base,name:`Opening ${i+1} with a lengthy room name`}))},{combined:true}));assert.ok(combined.getPageCount()>1);
 });
 

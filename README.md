@@ -8,7 +8,7 @@ With Node.js 22 or newer, run `npm install` in this directory once, then `npm st
 
 Open **http://127.0.0.1:4190/**. Keep that origin consistent: browser storage is separate on `localhost`. The server binds only to the local computer. When run locally, calculations and PDF generation stay on this computer. This app is separate from the marketing website.
 
-Jobs save to localStorage in the active browser. Export a backup before clearing browser data or moving computers. Restore merges by job ID and preserves a newer local revision. Example data is clearly labeled. PDFs use US Letter, start each opening on a new page, paginate long notes, and include quantity, cut size, profile, machining details, and checkboxes. Dimensions retain full precision during calculations and grouping; displayed lengths use 2 decimal places in mm or 4 in inches. No kerf allowance is added.
+Jobs save to localStorage in the active browser. Export a backup before clearing browser data or moving computers. Restore merges by job ID and preserves a newer local revision. Example data is clearly labeled. PDFs use US Letter, start each opening on a new page, paginate long notes, and include quantity, cut size, profile, and machining details. Dimensions retain full precision during calculations and grouping; displayed lengths use 2 decimal places in mm or 4 in inches. No kerf allowance is added.
 
 ## Deploy to Netlify
 
@@ -28,7 +28,7 @@ Light gap comes directly from the original workbook output (`PRINT SHEET!L9` or 
 
 ## Manufacturing scope and validation
 
-**All PDFs are validation drafts. Do not cut from them until representative completed orders have been reconciled with the trusted original workbook and shop practice.** This is a working first version, not production sign-off.
+Printed reference comparisons are documented below. Specific unresolved machining values remain identified in the app and PDFs; reference agreement alone does not establish physical shop validation.
 
 The interface uses a neutral black-and-white layout, collapsible secondary options, and visual panel choices. Select **T-post** under Construction to enter 1–4 cumulative post centerlines from the left edge of the entered size and a panel arrangement for each section. The default is two-piece standard-frame posts. Panels are equal within each section, but separate sections can have different widths. Existing browser jobs remain compatible.
 
@@ -47,6 +47,14 @@ A fresh download of the original Excel file matches all 2,432 retained source ce
 The 72.75 × 61.5 T-post printout has a 1,242 mm tilt rod. The default workbook mode gives 1,260 mm. Selecting the original split tilt-rod mode (`CALCULATION!H15=2`) reproduces 1,242 mm without changing any cut formula. The app now exposes `divisionMode` (`divider` or `split`) under Finish & other options. Existing jobs default to `divider`. In split mode the optional `divider` measurement becomes the split position; no divider rail is cut or drawn. With a blank split position, the original split-mode end allowance still applies. The original PDF does not print this setting, so the inferred mode needs operator confirmation; do not infer it from height or silently change existing jobs.
 
 The 47 × 37.5 standard reference prints a 332.6 mm louver midpoint for a 470.6 mm louver. This matches `PRINT SHEET!H23`, which takes the standard-frame branch into `FC CALCULATION!N50`; it is not half the louver length (235.3 mm). The app preserves and flags this inherited value pending a confirmed machining datum. Printed reference parity does not verify macros, physical fitting or every specialty configuration.
+
+## Compact cut sheets and calculated previews
+
+Frame cards are always visible in a single desktop row, with an outlined selected card. Narrow screens can scroll the row. The app and PDF use paired gray/white specification and machining boxes; repeated validation banners, generic footer warnings and sign-off checkboxes are omitted. Specific machining and missing-stock-length notes remain concise and visible.
+
+The schematic uses the original `CALCULATION (2)!F44:F46` louver groups and `K46` split count. Divider rails stop at the inner stile edges; upper/lower counts are drawn separately and shown below the preview. The 71 × 63.375 Z-frame, 3-sided opening with a 25-inch divider has 9 upper and 6 lower louvers per panel. No cut formula is changed by the presentation update.
+
+The four printed references, that divider example and a five-section T-post with a divider fit one Letter page per opening in both output units. Longer part lists use two columns. Long notes and combined cutting lists retain automatic pagination rather than dropping details. These cases and the drawing counts are covered in `test/preview-layout.test.mjs`.
 
 ## T-post calculation path
 

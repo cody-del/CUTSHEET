@@ -1,7 +1,7 @@
 import {FRAME_STYLES,frameStyle,frameNotice} from './public/frames.js';
 import workbook from './source/workbook.json' with {type:'json'};
 import {WorkbookEngine} from './engine.mjs';
-export const VERSION='20170211FCNew / app 0.4';
+export const VERSION='20170211FCNew / app 0.5';
 export const FRAMES={ST:'Standard',DS:'Designer',EX:'Extended',ZF:'Z-frame',TR:'Trim frame',HS:'Hanging strip'};
 export const SCOPE='Standard and T-post Shutter Smart shutters, 3 or 4 inch louvers. Manufacturing validation pending.';
 export const SOURCE_URL='https://docs.google.com/spreadsheets/d/1FGIwG2DLI-5FSbQ9KTH9_tn0t5dYAbkG/edit';
@@ -61,6 +61,14 @@ function openingEngine(o){
   }
   return new WorkbookEngine(workbook,overrides);
 }
+function louverLayout(o,e){
+  // These are the same per-panel groups printed beside the workbook's tilt rods.
+  const count=c=>{const v=e.cell('CALCULATION (2)',c);return Number.isInteger(v)&&v>=0?v:0;};
+  const groups=count('K46'),bottom=count('F44'),top=groups?count('F46'):0,middle=groups===2?count('F45'):0;
+  const center=e.cell('CALCULATION (2)','B44'),panelHeight=e.cell('CALCULATION (2)','B26');
+  return {bottom,top,middle,total:bottom+top+middle,divided:groups>0,
+    dividerFromBottom:o.divisionMode!=='split'&&o.divider>0&&Number.isFinite(center)?center:null,panelHeight};
+}
 export function calculate(o){
   validateOpening(o);
   if(frameNotice(o))return {parts:[],hinges:[],machining:[],warnings:[frameNotice(o)],reviewNotes:[],version:VERSION,status:'preview-only'};
@@ -89,7 +97,8 @@ export function calculate(o){
   const reviewNotes=[];
   const louver=parts.find(part=>part.name==='Louvers'),midpoint=machining.find(m=>m.label==='Louver midpoint');
   if(midpoint&&Math.abs(midpoint.value-louver.length/2)>0.01){midpoint.label='Legacy louver midpoint - verify';reviewNotes.push('The workbook midpoint differs from half the louver cut length. Verify this machining value against a trusted order.');}
-  return {parts,hinges,machining,panelWidth,panelHeight,louversPerPanel:p('D54')+(typeof p('D55')==='number'?p('D55'):0),gap:p('L9'),warnings:[...new Set(warnings)],reviewNotes,version:VERSION,status:'validation-draft',review:'Compare with a trusted completed cut sheet before cutting.',traceCount:e.cache.size};
+  const louvers=louverLayout(o,e);
+  return {parts,hinges,machining,panelWidth,panelHeight,louversPerPanel:louvers.total,louverLayout:louvers,gap:p('L9'),warnings:[...new Set(warnings)],reviewNotes,version:VERSION,status:'validation-draft',review:'Compare with a trusted completed cut sheet before cutting.',traceCount:e.cache.size};
 }
 function calculateTposts(o,e){
   const p=c=>e.cell('T Post Cutsheet',c),warnings=[],reviewNotes=[],parts=[],machining=[];
@@ -122,7 +131,8 @@ function calculateTposts(o,e){
   for(const [labelCell,valueCell]of [['B30','E30'],['F30','H30']]){const label=clean(p(labelCell)),value=p(valueCell);if(label&&Number.isFinite(value)&&value>0)machining.push({label,value});}
   const hinges=['D16','E16','F16','G16','H16','I16','J16'].map(p).filter(v=>Number.isFinite(v)&&v>0);
   if(o.tposts.construction==='two-piece')reviewNotes.push('Two-piece post: the workbook lists one ST FRAME post assembly per position. Confirm the stock pieces per assembly before cutting.');
-  return {parts,sections,tposts:{...o.tposts,configuration:configuration(o),positionDatum:'Cumulative post centerlines from the left edge of the entered measurement'},hinges,machining,panelWidth:null,panelHeight:e.cell('CALCULATION (2)','B26'),louversPerPanel:[48,49,50].map(r=>p('D'+r)).filter(Number.isFinite).reduce((a,b)=>a+b,0),gap:p('L8'),warnings:[...new Set(warnings)],reviewNotes,version:VERSION,status:'validation-draft',review:'Compare with a trusted completed cut sheet before cutting.',traceCount:e.cache.size};
+  const louvers=louverLayout(o,e);
+  return {parts,sections,tposts:{...o.tposts,configuration:configuration(o),positionDatum:'Cumulative post centerlines from the left edge of the entered measurement'},hinges,machining,panelWidth:null,panelHeight:e.cell('CALCULATION (2)','B26'),louversPerPanel:louvers.total,louverLayout:louvers,gap:p('L8'),warnings:[...new Set(warnings)],reviewNotes,version:VERSION,status:'validation-draft',review:'Compare with a trusted completed cut sheet before cutting.',traceCount:e.cache.size};
 }
 export function combinedParts(openings){
   const groups=new Map();
