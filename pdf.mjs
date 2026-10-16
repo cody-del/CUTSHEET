@@ -45,22 +45,33 @@ export async function createPDF(job,{combined=false,units='mm'}={}){
       else page.drawSvgPath(s.points.map((p,i)=>`${i?'L':'M'} ${p[0]} ${p[1]}`).join(' ')+' Z',{x:dx,y:dy,scale,color:tone(s.fill),borderColor:tone(s.tone),borderWidth:s.weight});}
     wrap(louverSummary(result),w,8).forEach((l,i)=>text(l,x+(w-regular.widthOfTextAtSize(ascii(l),8))/2,top-h-5-i*10,8,regular,muted));
   }
+  function tableColumns(w,small,isCombined){
+    if(isCombined)return {name:161,qty:175,cut:230,cutCheck:302,partialCheck:355,refs:392,refsWidth:w-400};
+    if(small)return {name:w-166,qty:w-154,cut:w-122,cutCheck:w-68,partialCheck:w-25};
+    return {name:w*.48-17,qty:w*.48,cut:w*.59,cutCheck:w-107,partialCheck:w-42};
+  }
   function tableHeader(x,w,yy,small=false,isCombined=false){
-    rect(x,yy-19,w,19,ink);const qty=x+w*(small?.65:.60),cut=x+w*(small?.78:.72);
-    text('PART / PROFILE',x+7,yy-12,7,bold,white);text('QTY',qty,yy-12,7,bold,white);text(`CUT (${units})`,cut,yy-12,7,bold,white);
-    if(isCombined)text('OPENINGS',x+w*.86,yy-12,7,bold,white);
+    const c=tableColumns(w,small,isCombined);rect(x,yy-19,w,19,ink);
+    text('PART / PROFILE',x+7,yy-12,7,bold,white);text('QTY',x+c.qty,yy-12,7,bold,white);text(`SIZE (${units})`,x+c.cut,yy-12,7,bold,white);
+    for(const [label,center]of [['CUT',c.cutCheck],['PARTIALLY CUT',c.partialCheck]]){
+      const size=small?5.8:6.5;text(label,x+center-bold.widthOfTextAtSize(label,size)/2,yy-12,size,bold,white);
+    }
+    if(isCombined)text('OPENINGS',x+c.refs,yy-12,7,bold,white);
   }
   function rowData(p,w,small,isCombined=false){
-    const title=p.name.replace(' · ',' ')+(p.section?`  S${p.section}`:''),nameSize=small?8:9;
-    const name=wrap(title,w*(small?.63:.58)-14,nameSize,bold),profile=wrap(p.profile,w*(small?.63:.58)-14,7);
-    const refs=isCombined?wrap(p.openings.map(o=>`${o.name} (${o.quantity})`).join(', '),w*.14-8,7):[];
+    const c=tableColumns(w,small,isCombined),title=p.name.replace(' · ',' ')+(p.section?`  S${p.section}`:''),nameSize=small?8:9;
+    const name=wrap(title,c.name,nameSize,bold),profile=wrap(p.profile,c.name,7);
+    const refs=isCombined?wrap(p.openings.map(o=>`${o.name} (${o.quantity})`).join(', '),c.refsWidth,7):[];
     return {p,name,profile,refs,nameSize,height:Math.max(small?20:22,(small?3:5)+name.length*(nameSize+1)+profile.length*8,refs.length*9+7)};
   }
   function row(data,x,w,top,index,small,isCombined=false){
-    const {p,name,profile,refs,nameSize,height}=data;rect(x,top-height,w,height,index%2===0?pale:white);
+    const {p,name,profile,refs,nameSize,height}=data,c=tableColumns(w,small,isCombined);rect(x,top-height,w,height,index%2===0?pale:white);
     let yy=top-(small?8:10);name.forEach(l=>{text(l,x+7,yy,nameSize,bold);yy-=nameSize+1;});profile.forEach(l=>{text(l,x+7,yy,7,regular,muted);yy-=8;});
-    text(p.quantity,x+w*(small?.65:.60),top-14,small?9:10,bold);text(length(p.length),x+w*(small?.78:.72),top-14,small?9:10,bold);
-    if(isCombined)refs.forEach((l,i)=>text(l,x+w*.86,top-11-i*9,7));
+    text(p.quantity,x+c.qty,top-14,small?9:10,bold);text(length(p.length),x+c.cut,top-14,small?9:10,bold);
+    // Printed status is intentionally blank; paper marks are independent of digital progress.
+    // A continued combined row keeps just one pair of checkboxes with its quantity.
+    if(p.quantity!=='')for(const center of [c.cutCheck,c.partialCheck])page.drawRectangle({x:x+center-4,y:top-16,width:8,height:8,color:white,borderColor:muted,borderWidth:.7});
+    if(isCombined)refs.forEach((l,i)=>text(l,x+c.refs,top-11-i*9,7));
   }
   function partTables(parts,isCombined=false){
     // Longer section lists use two readable columns instead of a mostly empty second page.

@@ -7,3 +7,4 @@ test-output/
 .DS_Store
 *.log
 .data/
+output/pdf/
