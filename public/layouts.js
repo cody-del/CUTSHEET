@@ -26,7 +26,7 @@ export function drawing(o,{louverLayout}={}){
   rectangle(left,top,width,height,'#fafafa','#888');
   polygon([[left,top],[left+5,top-5],[left+width+5,top-5],[left+width,top]],'#f4f4f4');
   polygon([[left+width,top],[left+width+5,top-5],[left+width+5,bottom-5],[left+width,bottom]],'#eee');
-  rectangle(left+3,top+3,width-6,height-6,'#fafafa','#bbb');
+  if(!frameStyle(o).square)rectangle(left+3,top+3,width-6,height-6,'#fafafa','#bbb');
   shapes.push(...frameShapes(o,{left,top,width,height}));
   const sections=o.tposts?o.tposts.sections:[{left:o.left,right:o.right}],positions=o.tposts?.positions||[],leaves=[],posts=[];
   for(let i=0;i<sections.length;i++){

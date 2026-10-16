@@ -1,7 +1,7 @@
 // Appearance is schematic. Only named workbook profiles have cutting rules.
 export const FRAME_STYLES=[
-  {id:'ST',name:'Standard frame',group:'Outside mount',profile:'ST',bands:[7,5,2]},
-  {id:'MS',name:'Modern Standard frame',group:'Outside mount',profile:null,bands:[8,2]},
+  {id:'ST',name:'Standard frame',group:'Outside mount',profile:'ST',square:true,bands:[5]},
+  {id:'MS',name:'Modern Standard frame',group:'Outside mount',profile:null,square:true,bands:[7]},
   {id:'DS',name:'Designer frame',group:'Outside mount',profile:'DS',bands:[11,9,7,4,2]},
   {id:'TR',name:'Trim frame',group:'Inside mount',profile:'TR',bands:[4,2]},
   {id:'MZ',name:'Modern Z frame',group:'Inside mount',profile:null,bands:[10,3]},
@@ -13,9 +13,18 @@ export const FRAME_STYLES=[
 const legacyExtended={id:'EX',name:'Extended frame (legacy)',profile:'EX',bands:[10,7,2]};
 export const frameStyle=o=>FRAME_STYLES.find(f=>f.id===(o.frameStyle||o.frame))||(o.frame==='EX'?legacyExtended:FRAME_STYLES[0]);
 export const frameNotice=o=>frameStyle(o).profile?'':`${frameStyle(o).name}: visual preview only. Cutting deductions still need confirmation before a cut sheet can be generated.`;
-// Four mitred strips, with nested moulding lines; three-sided frames omit the sill.
+// Standard profiles have a plain square face. Decorative profiles retain moulding.
+// Three-sided frames omit the sill in either construction.
 export function frameShapes(o,{left,top,width,height}){
  const style=frameStyle(o),shapes=[],right=left+width,bottom=top+height,three=o.sides==='3W'||o.sides==='3D';
+ if(style.square){
+  const b=style.bands[0],face=(x,y,w,h)=>shapes.push({kind:'polygon',points:[[x,y],[x+w,y],[x+w,y+h],[x,y+h]],fill:'#fff',tone:'#888',weight:.65});
+  face(left-b,top-b,width+2*b,b);
+  face(left-b,top,b,height);
+  face(right,top,b,height);
+  if(!three)face(left-b,bottom,width+2*b,b);
+  return shapes;
+ }
  for(const [i,b]of style.bands.entries()){
   const fill=i%2?'#f1f1f1':'#fff',tone=i===0?'#666':'#aaa';
   const poly=points=>shapes.push({kind:'polygon',points,fill,tone,weight:i===0?.85:.45});
