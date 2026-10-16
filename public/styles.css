@@ -75,3 +75,6 @@
 .paper td{padding:7px 10px;font-size:11px}.paper td small{margin-top:3px}.paper tbody tr:nth-child(even){background:#f7f7f7}.paper th{padding:9px 10px}.paper-posts{margin:0 0 13px}.paper-machining{padding:14px 0 0}.paper-machining h3{font-size:12px;margin:0 0 8px}.paper-machining h3 span{font-size:10px;color:#777;font-weight:400}.paper-notes{font-size:10px;line-height:1.5;color:#555;margin:12px 0}.paper-notes p+p{margin-top:4px}.paper-footer{margin-top:15px;padding-top:9px}
 @media(max-width:1050px){.frame-row{display:flex;overflow-x:auto;padding-bottom:8px;scroll-snap-type:x proximity}.frame-row .frame-choice{flex:0 0 110px;scroll-snap-align:start}}
 @media(max-width:640px){.paper-opening{grid-template-columns:minmax(0,1fr) 100px;gap:10px}.paper-opening .diagram{height:150px}.spec-grid>div{padding:7px}.spec-grid dd{font-size:10px}.frame-picker-heading span{display:none}}
+
+.app-header a.nav-btn{text-decoration:none;display:inline-flex;align-items:center}
+@media(max-width:760px){.app-header nav{gap:0}.app-header .nav-btn{padding:10px 8px;font-size:11px}.app-header{gap:15px}.app-header .save-state{display:none}}

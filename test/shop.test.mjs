@@ -1,0 +1,135 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {mkdtemp,rm} from 'node:fs/promises';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
+import {fileStore} from '../shop-store.mjs';
+import {createShopService} from '../shop-service.mjs';
+import {shopHandler} from '../shop-api.mjs';
+import {progress,elapsed,schedule,duration} from '../public/shop-state.js';
+import {calculate} from '../calculations.mjs';
+
+const opening={id:'opening-1',name:'Front window',width:36,height:60,quantity:2,left:1,right:1,louver:4,frame:'TR',sides:'4W',mount:'I',sizeMethod:'S',color:'W',tilt:'Back',stile:'Flat',divider:0,notes:''};
+const job={id:'job-1',name:'Workshop test',number:'TEST-001',notes:'Test only',due:'',openings:[opening]};
+const password='test-password-long-enough',secret='test-session-secret-with-more-than-32-characters';
+async function fixture(t,{local=true}={}){
+  const directory=await mkdtemp(join(tmpdir(),'cutsheet-shop-'));t.after(()=>rm(directory,{recursive:true,force:true}));
+  let time=Date.UTC(2026,9,16,16);const path=join(directory,'workshop.json');
+  const service=createShopService({store:fileStore(path),local,password,secret,now:()=>time});
+  return {service,path,advance:ms=>time+=ms,time:()=>time};
+}
+const ownerCookie=async service=>({owner:(await service.run('login',{password})).token});
+async function paired(service,cookie){const {code}=await service.run('pairing',{name:'Saw iPad'},cookie);return {shop:(await service.run('pair',{code})).token};}
+
+test('release uses original calculations and freezes the cut sheet',async t=>{
+  const {service}=await fixture(t),{job:released}=await service.run('publish',{job,targetMinutes:90});
+  assert.deepEqual(released.openings[0].lines.map(({id,completed,status,shortage,...part})=>part),calculate(opening).parts);
+  assert.equal(released.openings[0].input.quantity,2);
+  assert.equal(progress(released).percent,0);
+  await assert.rejects(service.run('publish',{job:{...job,openings:[{...opening,width:40}]}}),/already in the shop/);
+  assert.equal((await service.run('jobs')).jobs[0].openings[0].input.width,36);
+  await assert.rejects(service.run('publish',{job:{...job,id:'bad',openings:[{...opening,frameStyle:'MS'}]}}));
+});
+
+test('partial cuts synchronize quantity, alert and paused time across service instances',async t=>{
+  const f=await fixture(t);let {job:j}=await f.service.run('publish',{job,targetMinutes:30});
+  ({job:j}=await f.service.run('timer',{id:j.id,version:j.version,action:'start'}));f.advance(12*60000);
+  const line=j.openings[0].lines[0];
+  ({job:j}=await f.service.run('line',{id:j.id,version:j.version,lineId:line.id,status:'partial',completed:3,outOfMaterial:true,note:'Need white louver stock'}));
+  assert.equal(j.startedAt,null);assert.equal(j.elapsedMs,12*60000);assert.equal(progress(j).alerts.length,1);
+  const second=createShopService({store:fileStore(f.path),local:true});const remote=(await second.run('dashboard')).jobs[0];
+  assert.equal(remote.openings[0].lines[0].completed,3);assert.equal(remote.openings[0].lines[0].shortage.note,'Need white louver stock');
+  assert.equal(schedule(remote,f.time()).label,'Needs material');
+  ({job:j}=await f.service.run('resolve',{id:j.id,version:j.version,lineId:line.id,status:'acknowledged'}));
+  assert.equal(progress(j).alerts.length,1);
+  ({job:j}=await f.service.run('resolve',{id:j.id,version:j.version,lineId:line.id,status:'resolved'}));
+  assert.equal(progress(j).alerts.length,0);assert.equal(j.openings[0].lines[0].completed,3);assert.equal(j.startedAt,null);
+});
+
+test('timer excludes pauses, rejects simultaneous jobs and stops on final cut',async t=>{
+  const f=await fixture(t);let {job:j}=await f.service.run('publish',{job,targetMinutes:5});
+  const {job:other}=await f.service.run('publish',{job:{...job,id:'job-2'}});
+  ({job:j}=await f.service.run('timer',{id:j.id,version:j.version,action:'start'}));
+  await assert.rejects(f.service.run('timer',{id:other.id,version:other.version,action:'start'}),/Pause TEST-001/);
+  f.advance(3*60000);({job:j}=await f.service.run('timer',{id:j.id,version:j.version,action:'pause'}));
+  f.advance(30*60000);assert.equal(elapsed(j,f.time()),3*60000);
+  ({job:j}=await f.service.run('timer',{id:j.id,version:j.version,action:'start'}));f.advance(4*60000);
+  assert.equal(schedule(j,f.time()).label,'Over estimate');
+  await assert.rejects(f.service.run('timer',{id:j.id,version:j.version,action:'finish'}),/every cut-sheet line/);
+  for(const line of j.openings[0].lines)({job:j}=await f.service.run('line',{id:j.id,version:j.version,lineId:line.id,status:'cut'}));
+  assert.equal(progress(j).percent,100);assert.equal(j.startedAt,null);assert.equal(j.elapsedMs,7*60000);assert.ok(j.completedAt);
+  assert.equal(schedule(j,f.time()).label,'Complete · over estimate');
+});
+
+test('stale or concurrent changes cannot silently overwrite another employee',async t=>{
+  const {service}=await fixture(t),{job:j}=await service.run('publish',{job});const lineId=j.openings[0].lines[0].id;
+  const results=await Promise.allSettled([service.run('line',{id:j.id,version:j.version,lineId,status:'cut'}),service.run('line',{id:j.id,version:j.version,lineId,status:'not-cut'})]);
+  assert.equal(results.filter(r=>r.status==='fulfilled').length,1);assert.match(results.find(r=>r.status==='rejected').reason.message,/another device/);
+  assert.equal((await service.run('jobs')).jobs[0].openings[0].lines[0].status,'cut');
+});
+
+test('invalid counts and missing shortage answers never save',async t=>{
+  const {service}=await fixture(t),{job:j}=await service.run('publish',{job}),line=j.openings[0].lines[0];
+  for(const values of [{completed:-1,outOfMaterial:false},{completed:1.5,outOfMaterial:false},{completed:line.quantity,outOfMaterial:false},{completed:2}]){
+    await assert.rejects(service.run('line',{id:j.id,version:j.version,lineId:line.id,status:'partial',...values}));
+  }
+  const saved=(await service.run('jobs')).jobs[0];assert.equal(saved.version,j.version);assert.equal(saved.openings[0].lines[0].completed,0);
+  const {job:partial}=await service.run('line',{id:j.id,version:j.version,lineId:line.id,status:'partial',completed:0,outOfMaterial:true});
+  assert.equal(progress(partial).alerts.length,1);
+});
+
+test('hosted owner auth, one-time pairing, expiry and revocation enforce roles',async t=>{
+  const f=await fixture(t,{local:false}),service=f.service;
+  await assert.rejects(service.run('jobs'),e=>e.status===401);
+  const owner=await ownerCookie(service);const {job:j}=await service.run('publish',{job},owner);
+  const {code}=await service.run('pairing',{name:'Saw iPad'},owner);const pairing=await service.run('pair',{code}),shop={shop:pairing.token};
+  assert.equal((await service.run('session',{},shop)).role,'shop');
+  assert.equal((await service.run('pair',{code})).status,401);
+  for(const operation of ['dashboard','publish','pairing','plan','resolve','revoke'])await assert.rejects(service.run(operation,{},shop),e=>e.status===403);
+  await service.run('line',{id:j.id,version:j.version,lineId:j.openings[0].lines[0].id,status:'cut'},shop);
+  const {devices}=await service.run('dashboard',{},owner);await service.run('revoke',{deviceId:devices[0].id},owner);
+  await assert.rejects(service.run('jobs',{},shop),e=>e.status===401);
+  f.advance(13*3600000);await assert.rejects(service.run('dashboard',{},owner),e=>e.status===401);
+});
+
+test('hosted setup fails closed, rate limiting persists and forged cookies fail',async t=>{
+  const f=await fixture(t,{local:false}),service=f.service;
+  assert.equal((await createShopService({store:null}).run('session')).configured,false);
+  await assert.rejects(createShopService({store:null}).run('jobs'),e=>e.status===503);
+  for(let i=0;i<10;i++)assert.equal((await service.run('login',{password:'wrong'})).status,401);
+  assert.equal((await service.run('login',{password})).status,429);
+  f.advance(16*60000);const owner=await ownerCookie(service);assert.equal((await service.run('session',{},owner)).role,'owner');
+  assert.equal((await service.run('session',{}, {owner:owner.owner+'x'})).role,null);
+});
+
+test('shop HTTP API protects writes, limits bodies, and uses secure HttpOnly cookies',async t=>{
+  const {service}=await fixture(t,{local:false}),handler=shopHandler(service);
+  const request=(action,data,extra={})=>new Request('https://shop.example/api/shop/'+action,{method:'POST',headers:{'content-type':'application/json',origin:'https://shop.example',...extra},body:JSON.stringify(data)});
+  const login=await handler(request('login',{password}));assert.equal(login.status,200);
+  const cookie=login.headers.get('set-cookie');assert.match(cookie,/HttpOnly/);assert.match(cookie,/SameSite=Strict/);assert.match(cookie,/Secure/);assert.ok(!(await login.json()).token);
+  assert.equal((await handler(request('publish',{job},{cookie,origin:'https://evil.example'}))).status,403);
+  assert.equal((await handler(request('publish',{job},{cookie,'content-type':'text/plain'}))).status,415);
+  assert.equal((await handler(request('publish',{job,x:'x'.repeat(512001)},{cookie}))).status,413);
+  assert.equal((await handler(request('publish',{job},{cookie}))).status,200);
+  assert.equal((await handler(new Request('https://shop.example/api/shop/dashboard'))).status,401);
+});
+
+test('due date uses the shop day and completed jobs do not appear overdue',()=>{
+  const j={openings:[{lines:[{quantity:10,completed:0}]}],elapsedMs:0,startedAt:null,due:'2026-10-16',targetMinutes:60};
+  assert.equal(schedule(j,Date.UTC(2026,9,17,2)).label,'Ready to cut');
+  assert.equal(schedule(j,Date.UTC(2026,9,17,6)).label,'Past target date');
+  j.openings[0].lines[0].completed=10;assert.equal(schedule(j,Date.UTC(2026,9,17,6)).label,'Fully cut');
+});
+
+test('progress does not round incomplete jobs to fully cut and short timers show seconds',()=>{
+  const j={openings:[{lines:[{quantity:1000,completed:999}]}]};
+  assert.equal(progress(j).percent,99);assert.equal(progress(j).complete,false);
+  assert.equal(duration(8000),'8s');assert.equal(duration(3600000),'1h 0m');
+});
+
+test('invalid deadlines are validation errors and expired pairing codes cannot connect',async t=>{
+  const f=await fixture(t,{local:false}),owner=await ownerCookie(f.service);
+  await assert.rejects(f.service.run('publish',{job,due:'2026-99-99'},owner),e=>e.status===400);
+  const {code}=await f.service.run('pairing',{name:'Expired code test'},owner);f.advance(11*60000);
+  assert.equal((await f.service.run('pair',{code})).status,401);
+});

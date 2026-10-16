@@ -8,7 +8,7 @@ const json = (status, data) => new Response(JSON.stringify(data), {
 });
 
 // Keep the browser's existing API URLs on the deployed site.
-export const config = {path: '/api/*'};
+export const config = {path: ['/api/info','/api/calculate','/api/pdf']};
 
 export default async function handler(request) {
   const url = new URL(request.url);

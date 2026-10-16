@@ -5,5 +5,5 @@
   "type": "module",
   "engines": {"node": ">=22"},
   "scripts": {"start": "node server.mjs", "build": "npm test", "test": "node --test test/*.test.mjs"},
-  "dependencies": {"pdf-lib": "^1.17.1"}
+  "dependencies": {"pdf-lib": "^1.17.1", "pg": "^8.16.3"}
 }

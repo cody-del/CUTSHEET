@@ -4,7 +4,11 @@ import {fileURLToPath} from 'node:url';
 import {resolve,sep,extname} from 'node:path';
 import {calculate,ValidationError,SCOPE,VERSION} from './calculations.mjs';
 import {createPDF} from './pdf.mjs';
+import {fileStore} from './shop-store.mjs';
+import {createShopService} from './shop-service.mjs';
+import {shopHandler} from './shop-api.mjs';
 const root=resolve(fileURLToPath(new URL('./public/',import.meta.url))),port=Number(process.env.PORT||4190);
+const handleShop=shopHandler(createShopService({store:fileStore(fileURLToPath(new URL('./.data/workshop.json',import.meta.url))),local:true}));
 const types={'.html':'text/html; charset=utf-8','.css':'text/css; charset=utf-8','.js':'text/javascript; charset=utf-8','.svg':'image/svg+xml','.png':'image/png'};
 const server=http.createServer(async(req,res)=>{
   const json=(status,data)=>{res.writeHead(status,{'Content-Type':'application/json','Cache-Control':'no-store'});res.end(JSON.stringify(data));};
@@ -12,6 +16,13 @@ const server=http.createServer(async(req,res)=>{
     const url=new URL(req.url,`http://127.0.0.1:${port}`);
     if(!['127.0.0.1','localhost'].includes(url.hostname))return json(403,{error:'Local access only.'});
     if(req.headers.host!==`127.0.0.1:${port}`&&req.headers.host!==`localhost:${port}`)return json(403,{error:'Local access only.'});
+    if(url.pathname.startsWith('/api/shop/')){
+      const request=new Request(new URL(url.pathname+url.search,`http://${req.headers.host}`),{method:req.method,headers:req.headers,...(!['GET','HEAD'].includes(req.method)?{body:req,duplex:'half'}:{})});
+      const response=await handleShop(request);
+      for(const cookie of response.headers.getSetCookie())res.appendHeader('Set-Cookie',cookie);
+      res.writeHead(response.status,Object.fromEntries([...response.headers].filter(([key])=>key!=='set-cookie')));
+      return res.end(Buffer.from(await response.arrayBuffer()));
+    }
     if(url.pathname.startsWith('/api/')){
       if(url.pathname==='/api/info'&&req.method==='GET')return json(200,{scope:SCOPE,version:VERSION});
       if(req.method!=='POST')return json(405,{error:'POST required.'});

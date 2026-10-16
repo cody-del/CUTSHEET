@@ -12,13 +12,13 @@ Jobs save to localStorage in the active browser. Export a backup before clearing
 
 ## Deploy to Netlify
 
-Import the `cody-del/CUTSHEET` GitHub repository into Netlify. The root `netlify.toml` sets Node 22, runs the test suite before every deployment, publishes `public/`, and bundles the calculation/PDF handler from `netlify/functions/api.mjs`. No environment variables or external database are required. The workbook is a JSON module bundled into the function; it is not published as a static asset.
+Import the `cody-del/CUTSHEET` GitHub repository into Netlify. The root `netlify.toml` sets Node 22, runs the test suite before every deployment, publishes `public/`, and bundles the calculation/PDF handler from `netlify/functions/api.mjs`. The calculator and PDF generator need no environment variables or external database. The optional shared workshop needs the setup below. The workbook is a JSON module bundled into the function; it is not published as a static asset.
 
-The browser calls `/api/info`, `/api/calculate`, and `/api/pdf` on the same site. On Netlify, opening measurements and job details needed to generate PDFs are processed by Netlify Functions. This app does not write them to a server database or log them. Saved jobs and the uploaded logo remain in localStorage in the current browser; they are not shared between users or devices.
+The browser calls `/api/info`, `/api/calculate`, and `/api/pdf` on the same site. On Netlify, opening measurements and job details needed to generate PDFs are processed by Netlify Functions. The calculation and PDF endpoints do not store or log those requests. Explicitly sending a job to the shop stores its released cut sheets in the shared workshop. Saved jobs and the uploaded logo remain in localStorage in the current browser; they are not shared between users or devices.
 
 To move jobs from the local app to the hosted site, choose **Settings → Export backup** locally, then **Settings → Import backup** on the live site. Upload your logo again in the live site's Settings. Browser storage is separate for each origin, so choose the stable production URL for everyday work. Deploy preview URLs each have separate storage.
 
-The hosted app has no sign-in or shared job storage. Anyone with the site URL can use the calculator, but they cannot read another browser's saved jobs. Source workbook validation restrictions also apply to hosted PDF downloads.
+Anyone with the site URL can use the calculator, but they cannot read another browser's saved drafts. The shared workshop has separate owner and paired-device access. Source workbook validation restrictions also apply to hosted PDF downloads.
 
 ## Measurement basis and light gap
 
@@ -30,7 +30,7 @@ Light gap comes directly from the original workbook output (`PRINT SHEET!L9` or 
 
 Printed reference comparisons are documented below. Specific unresolved machining values remain identified in the app and PDFs; reference agreement alone does not establish physical shop validation.
 
-The interface uses a neutral black-and-white layout, collapsible secondary options, and visual panel choices. Select **T-post** under Construction to enter 1–4 cumulative post centerlines from the left edge of the entered size and a panel arrangement for each section. The default is two-piece standard-frame posts. Panels are equal within each section, but separate sections can have different widths. Existing browser jobs remain compatible.
+The interface uses a neutral black-and-white layout, always-visible finish and secondary options, and visual panel choices. Select **T-post** under Construction to enter 1–4 cumulative post centerlines from the left edge of the entered size and a panel arrangement for each section. The default is two-piece standard-frame posts. Panels are equal within each section, but separate sections can have different widths. Existing browser jobs remain compatible.
 
 Supported: 1, 2, 3, or 4 equal panels with every left/right split; 3 or 4 inch louvers; six frame types; inside/outside mounts; 4-sided windows, 3-sided windows/doors; one optional divider. The product family is explicitly Shutter Smart. French cuts, double-hung configurations, other material families, custom framing, and specialty accessories are not exposed.
 
@@ -96,3 +96,32 @@ The user-provided panel configuration reference (September 21, 2026) defines the
 `public/layouts.js` owns the shared hinged-panel drawing geometry used in picker thumbnails, opening previews, and PDF schematics. T-post sections restart their own left/right folding groups at the post positions. Angles are illustrative, not hardware-clearance calculations.
 
 The opening schematic occupies a full-width row below the measurements and automatically fits its SVG bounds, preserving the opening aspect ratio on wide T-post jobs. The 106-inch direct-entry cap applies to standard openings only; T-post jobs use original section-width and frame warnings. Post order and opening bounds are checked inline, and invalid positions suppress the drawing until corrected.
+
+
+## Digital shop floor and owner dashboard
+
+Open `/owner.html` for production progress and `/shop.html` for the iPad cut sheets. From a saved job, **Send to shop** publishes a fixed, server-calculated copy. Draft edits never change released dimensions or quantities. Releasing the same job twice is rejected; revision/re-release management is not included yet. Material shortages are dashboard alerts, not email or push notifications.
+
+Each line records **Not cut**, **Partially cut**, or **Fully cut**, including the actual completed quantity. Partial cuts ask whether material ran out. Yes opens a material request and pauses the active job timer. The owner can acknowledge it or mark material ready; neither changes the cut quantity or restarts the timer. Completing a line clears its material request. Completing all lines stops the timer automatically. Corrections are recorded in the activity history.
+
+The owner sets estimated active cutting minutes and an optional target date. Pauses are excluded; a running timer continues across reloads and closed tabs until paused or all cuts finish. This version allows one active cutting job for the shared shop. Progress percentages count pieces, not estimated labor. Labels compare active time with the estimate and flag past target dates (end of day in America/New_York); they do not predict labor from piece percentages. Visible screens refresh from the server every five seconds. Failed/offline updates are not shown as saved. Version checks reject stale concurrent changes.
+
+### Local preview
+
+The loopback-only local server persists workshop jobs, device connections, and activity in `.data/workshop.json`, independently of browser drafts. Back up that file separately from draft JSON exports. It is Git-ignored. Local owner access skips sign-in; this mode must not be exposed to a public network. A localhost link on an iPad points to the iPad itself, not this computer. Use the hosted setup for separate devices.
+
+### Hosted shared storage and access
+
+The new Netlify function uses a PostgreSQL transaction with a row lock for all workshop changes. See [node-postgres transactions](https://node-postgres.com/features/transactions). No hosted data is written to a function's temporary filesystem. Storage is designed for a small single workshop, with up to 500 released jobs and the latest 200 activity entries per job; it is not a payroll system or unlimited audit archive.
+
+Set these environment variables in Netlify's Functions scope, then redeploy:
+
+- `CUTSHEET_DATABASE_URL`: the private PostgreSQL connection URL. Alternatively, a configured [Netlify Database](https://docs.netlify.com/build/data-and-storage/netlify-database/) supplies `NETLIFY_DB_URL`.
+- `CUTSHEET_OWNER_PASSWORD`: a unique owner password of at least 12 characters.
+- `CUTSHEET_SESSION_SECRET`: a cryptographically random secret of at least 32 characters.
+
+Never commit these values or put them in the browser bundle. The function creates its `cutsheet_workshop` table on first use. Use a database credential restricted to the application database and take database backups. The hosted workshop remains unavailable until all configuration is present; existing calculator/PDF features continue working.
+
+The owner signs in to `/owner.html` (12-hour session), then generates a one-time, 10-minute connection code for `/shop.html` on the iPad. There are no employee accounts. A paired device uses a Secure, HttpOnly, SameSite cookie for up to 180 days, and the owner can revoke it at any time. The server records the device name, not an employee identity. Password and session-secret changes invalidate owner sessions; device connections must be revoked separately. A paired iPad cannot release jobs, modify schedules, resolve owner material alerts, pair other devices, or read the owner dashboard API. Keep owner access in a separate browser from the paired shop session.
+
+The PostgreSQL deployment needs a real site/database connection and a cross-device acceptance check before shop use. Local workflow, persistence, timing, roles, authentication, pairing, revocation, stale writes, quantity validation and HTTP protections are covered by `test/shop.test.mjs`.
