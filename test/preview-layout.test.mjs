@@ -49,3 +49,16 @@ test('all four references, the divider example, and a five-section opening fit o
     pdf.getPages().forEach(p=>assert.deepEqual(p.getSize(),{width:612,height:792}));
   }
 });
+
+test('expanded parts lists leave room for notes and the checklist with one through four T-posts',async()=>{
+  const openings=Array.from({length:4},(_,i)=>{
+    const sections=i+2;
+    return {...large,name:`Opening with ${i+1} T-posts`,width:sections*30,tilt:i%2?'Front':'Back',
+      notes:'Keep these panels together for installation. Check the room label before moving them to assembly.',
+      tposts:{construction:'two-piece',positions:Array.from({length:i+1},(_,n)=>(n+1)*30),sections:Array.from({length:sections},()=>({left:1,right:1}))}};
+  });
+  for(const units of ['mm','in']){
+    const pdf=await PDFDocument.load(await createPDF({number:'LAYOUT-NOTES',customer:'Example customer and installation address with enough detail to wrap onto a second header line for this layout check',openings},{units}));
+    assert.equal(pdf.getPageCount(),openings.length);
+  }
+});

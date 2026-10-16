@@ -27,11 +27,18 @@ export async function createPDF(job,{combined=false,units='mm'}={}){
     const font=boldText?bold:regular;
     for(const l of wrap(value,width,size,font)){ensure(size+5);text(l,margin,y-size,size,font);y-=size+4;}y-=3;
   }
-  function facts(items,{x=margin,w=width,columns=2,compact=false,dense=false}={}){
-    const gap=5,cw=(w-gap*(columns-1))/columns,size=compact?8.2:9,start=y;
+  function factsLayout(items,{w=width,columns=2,compact=false,dense=false}={}){
+    const gap=5,cw=(w-gap*(columns-1))/columns,size=compact?8.2:9,rows=[];
     for(let i=0;i<items.length;i+=columns){
       const group=items.slice(i,i+columns).map(([label,value])=>({label:wrap(label,cw-14,7),value:wrap(value,cw-14,size,bold)}));
       const height=Math.max(...group.map(c=>(dense?3:11)+c.label.length*8+c.value.length*(size+2)));
+      rows.push({group,height});
+    }
+    return {gap,cw,size,rows,height:rows.reduce((sum,row)=>sum+row.height+gap,0)};
+  }
+  function facts(items,{x=margin,...options}={}){
+    const {gap,cw,size,rows}=factsLayout(items,options),start=y;
+    for(const {group,height}of rows){
       ensure(height+gap,'Machining continued');
       group.forEach((cell,col)=>{const xx=x+col*(cw+gap);rect(xx,y-height,cw,height,col%2===0?pale:white,true);let yy=y-10;cell.label.forEach(l=>{text(l,xx+7,yy,7,regular,muted);yy-=8;});cell.value.forEach(l=>{text(l,xx+7,yy,size,bold);yy-=size+2;});});
       y-=height+gap;
@@ -58,35 +65,50 @@ export async function createPDF(job,{combined=false,units='mm'}={}){
     }
     if(isCombined)text('OPENINGS',x+c.refs,yy-12,7,bold,white);
   }
-  function rowData(p,w,small,isCombined=false){
-    const c=tableColumns(w,small,isCombined),title=p.name.replace(' · ',' ')+(p.section?`  S${p.section}`:''),nameSize=small?8:9;
-    const name=wrap(title,c.name,nameSize,bold),profile=wrap(p.profile,c.name,7);
+  function rowData(p,w,small,isCombined=false,scale=1){
+    const c=tableColumns(w,small,isCombined),title=p.name.replace(' · ',' ')+(p.section?`  S${p.section}`:''),nameSize=(small?8:9)*scale,profileSize=7*scale,valueSize=(small?9:10)*scale;
+    const name=wrap(title,c.name,nameSize,bold),profile=wrap(p.profile,c.name,profileSize);
     const refs=isCombined?wrap(p.openings.map(o=>`${o.name} (${o.quantity})`).join(', '),c.refsWidth,7):[];
-    return {p,name,profile,refs,nameSize,height:Math.max(small?20:22,(small?3:5)+name.length*(nameSize+1)+profile.length*8,refs.length*9+7)};
+    const baseHeight=Math.max(small?20:22,(small?3:5)+name.length*(nameSize+1)+profile.length*(profileSize+1),refs.length*9+7);
+    return {p,name,profile,refs,nameSize,profileSize,valueSize,baseHeight,height:baseHeight};
   }
   function row(data,x,w,top,index,small,isCombined=false){
-    const {p,name,profile,refs,nameSize,height}=data,c=tableColumns(w,small,isCombined);rect(x,top-height,w,height,index%2===0?pale:white);
-    let yy=top-(small?8:10);name.forEach(l=>{text(l,x+7,yy,nameSize,bold);yy-=nameSize+1;});profile.forEach(l=>{text(l,x+7,yy,7,regular,muted);yy-=8;});
-    text(p.quantity,x+c.qty,top-14,small?9:10,bold);text(length(p.length),x+c.cut,top-14,small?9:10,bold);
+    const {p,name,profile,refs,nameSize,profileSize,valueSize,baseHeight,height}=data,c=tableColumns(w,small,isCombined);rect(x,top-height,w,height,index%2===0?pale:white);
+    let yy=top-(height-baseHeight)/2-nameSize-(small?0:1);name.forEach(l=>{text(l,x+7,yy,nameSize,bold);yy-=nameSize+1;});profile.forEach(l=>{text(l,x+7,yy,profileSize,regular,muted);yy-=profileSize+1;});
+    const center=top-height/2,numberY=isCombined?top-14:center-valueSize*.3;
+    text(p.quantity,x+c.qty,numberY,valueSize,bold);text(length(p.length),x+c.cut,numberY,valueSize,bold);
     // Printed status is intentionally blank; paper marks are independent of digital progress.
     // A continued combined row keeps just one pair of checkboxes with its quantity.
-    if(p.quantity!=='')for(const center of [c.cutCheck,c.partialCheck])page.drawRectangle({x:x+center-4,y:top-16,width:8,height:8,color:white,borderColor:muted,borderWidth:.7});
+    if(p.quantity!=='')for(const offset of [c.cutCheck,c.partialCheck])page.drawRectangle({x:x+offset-4,y:isCombined?top-16:center-4,width:8,height:8,color:white,borderColor:muted,borderWidth:.7});
     if(isCombined)refs.forEach((l,i)=>text(l,x+c.refs,top-11-i*9,7));
   }
-  function partTables(parts,isCombined=false){
+  function partTables(parts,isCombined=false,maxHeight=0){
     // Longer section lists use two readable columns instead of a mostly empty second page.
-    const columns=!isCombined&&parts.length>16?2:1,gap=12,w=(width-gap*(columns-1))/columns,small=columns===2;
-    const size=Math.ceil(parts.length/columns),groups=Array.from({length:columns},(_,i)=>parts.slice(i*size,(i+1)*size));
+    const gap=12;
+    function layout(columns,scale=1){
+      const w=(width-gap*(columns-1))/columns,small=columns===2,size=Math.ceil(parts.length/columns);
+      const groups=Array.from({length:columns},(_,i)=>parts.slice(i*size,(i+1)*size).map(p=>rowData(p,w,small,isCombined,scale)));
+      return {columns,w,small,groups,height:19+Math.max(...groups.map(group=>group.reduce((sum,row)=>sum+row.height,0)))+12};
+    }
+    let plan=layout(!isCombined&&parts.length>16?2:1);
+    if(!isCombined&&maxHeight>0){
+      if(plan.columns===1&&plan.height>maxHeight&&parts.length>10){const compact=layout(2);if(compact.height<=maxHeight)plan=compact;}
+      // Enlarge only after reserving the actual machining, notes and bottom checklist.
+      for(const scale of [1.2,1.1]){const larger=layout(plan.columns,scale);if(larger.height<=maxHeight){plan=larger;break;}}
+      const extra=Math.max(0,maxHeight-plan.height),count=Math.max(...plan.groups.map(group=>group.length));
+      for(const group of plan.groups)for(const data of group)data.height+=extra/count;
+    }
+    const {columns,w,small,groups}=plan;
     const top=y;let bottom=y;
     for(let col=0;col<columns;col++){
       y=top;const x=margin+col*(w+gap);tableHeader(x,w,y,small,isCombined);y-=19;
       let index=0;
-      for(const p of groups[col]){
-        const data=rowData(p,w,small,isCombined);
+      for(const data of groups[col]){
+        const {p}=data;
         // A combined row can carry many room references; keep every reference with its cut.
         const referenceChunks=isCombined&&data.height>y-floor?Math.max(1,Math.floor((y-floor-8)/9)):data.refs.length;
         if(isCombined&&data.refs.length>referenceChunks){
-          for(let i=0;i<data.refs.length;i+=referenceChunks){const chunk={...data,refs:data.refs.slice(i,i+referenceChunks),p:{...p,quantity:i?'':p.quantity}};chunk.height=Math.max(22,5+chunk.name.length*(chunk.nameSize+1)+chunk.profile.length*8,chunk.refs.length*9+7);
+          for(let i=0;i<data.refs.length;i+=referenceChunks){const chunk={...data,refs:data.refs.slice(i,i+referenceChunks),p:{...p,quantity:i?'':p.quantity}};chunk.height=Math.max(22,5+chunk.name.length*(chunk.nameSize+1)+chunk.profile.length*8,chunk.refs.length*9+7);chunk.baseHeight=chunk.height;
             if(y-chunk.height<floor){newPage('Combined cutting list continued');tableHeader(x,w,y,small,true);y-=19;}
             row(chunk,x,w,y,index++,small,true);y-=chunk.height;
           }
@@ -99,12 +121,16 @@ export async function createPDF(job,{combined=false,units='mm'}={}){
     }
     y=bottom-12;
   }
-  function completionChecklist(openings){
+  function completionLayout(openings){
     const tilts=[...new Set(openings.map(o=>o.tilt==='Smart'?'Smart View':`${o.tilt} tilt`))].join(' / ');
     const gap=5,w=(width-gap*5)/6;
     const labels=[['Louvers notched',tilts],['Stiles capped'],['Louvers capped'],['Stiles and rails bored'],['Panels built and pressed'],['Hinged / complete']]
       .map(lines=>lines.flatMap(label=>wrap(label,w-12,8,bold)));
     const height=Math.max(44,...labels.map(lines=>lines.length*9+22));
+    return {gap,w,labels,height};
+  }
+  function completionChecklist(openings){
+    const {gap,w,labels,height}=completionLayout(openings);
     ensure(height+6,'Shop progress');
     const top=floor+height;
     labels.forEach((lines,i)=>{
@@ -133,11 +159,14 @@ export async function createPDF(job,{combined=false,units='mm'}={}){
     y-=5;
     if(o.tposts)paragraph(`${o.tposts.construction==='two-piece'?'Two-piece':'One-piece'} posts. Centerlines from left (${units}): ${o.tposts.positions.map(v=>length(v*25.4)).join('   ')}`);
     if(o.divider)paragraph(`${o.divisionMode==='split'?'Split':'Divider'} input from bottom: ${length(o.divider*25.4)} ${units}.`);
-    partTables(result.parts);
     const machining=[['Hinges from stile end',result.hinges.map(length).join(', ')],...result.machining.map(m=>[machiningLabel(m.label),length(m.value)])];
+    const machiningOptions={columns:machining.length>6?3:2,compact:true,dense:result.parts.length>12},notes=cutSheetNotes(result);
+    const paragraphHeight=(value,size=8.5)=>wrap(value,width,size).length*(size+4)+3;
+    const remaining=16+factsLayout(machining,machiningOptions).height+3+notes.reduce((sum,note)=>sum+paragraphHeight(note,8),0)+(o.notes?paragraphHeight(`Shop notes: ${o.notes}`):0)+completionLayout([o]).height+12;
+    partTables(result.parts,false,y-floor-remaining);
     ensure(48,'Machining continued');text(`MACHINING (${units})`,margin,y-8,8,bold);y-=16;
-    facts(machining,{columns:machining.length>6?3:2,compact:true,dense:result.parts.length>12});
-    y-=3;for(const note of cutSheetNotes(result))paragraph(note,{size:8});
+    facts(machining,machiningOptions);
+    y-=3;for(const note of notes)paragraph(note,{size:8});
     if(o.notes)paragraph(`Shop notes: ${o.notes}`);
     completionChecklist([o]);
   }
