@@ -31,7 +31,7 @@ export async function createPDF(job,{combined=false,units='mm'}={}){
     const gap=5,cw=(w-gap*(columns-1))/columns,size=compact?8.2:9,start=y;
     for(let i=0;i<items.length;i+=columns){
       const group=items.slice(i,i+columns).map(([label,value])=>({label:wrap(label,cw-14,7),value:wrap(value,cw-14,size,bold)}));
-      const height=Math.max(...group.map(c=>(dense?7:11)+c.label.length*8+c.value.length*(size+2)));
+      const height=Math.max(...group.map(c=>(dense?3:11)+c.label.length*8+c.value.length*(size+2)));
       ensure(height+gap,'Machining continued');
       group.forEach((cell,col)=>{const xx=x+col*(cw+gap);rect(xx,y-height,cw,height,col%2===0?pale:white,true);let yy=y-10;cell.label.forEach(l=>{text(l,xx+7,yy,7,regular,muted);yy-=8;});cell.value.forEach(l=>{text(l,xx+7,yy,size,bold);yy-=size+2;});});
       y-=height+gap;
@@ -99,6 +99,24 @@ export async function createPDF(job,{combined=false,units='mm'}={}){
     }
     y=bottom-12;
   }
+  function completionChecklist(openings){
+    const tilts=[...new Set(openings.map(o=>o.tilt==='Smart'?'Smart View':`${o.tilt} tilt`))].join(' / ');
+    const gap=5,w=(width-gap*5)/6;
+    const labels=[['Louvers notched',tilts],['Stiles capped'],['Louvers capped'],['Stiles and rails bored'],['Panels built and pressed'],['Hinged / complete']]
+      .map(lines=>lines.flatMap(label=>wrap(label,w-12,8,bold)));
+    const height=Math.max(44,...labels.map(lines=>lines.length*9+22));
+    ensure(height+6,'Shop progress');
+    const top=floor+height;
+    labels.forEach((lines,i)=>{
+      const x=margin+i*(w+gap);rect(x,floor,w,height,i%2===0?pale:white,true);
+      lines.forEach((label,j)=>text(label,x+6,top-12-j*9,8,bold));
+      for(const [label,offset]of [['Partial',6],['Complete',43]]){
+        page.drawRectangle({x:x+offset,y:floor+8,width:7,height:7,color:white,borderColor:muted,borderWidth:.7});
+        text(label,x+offset+10,floor+9,7);
+      }
+    });
+    y=floor;
+  }
   if(combined){
     newPage('Combined cutting list');paragraph(`${job.openings.length} openings. Parts grouped by exact size, profile and finish.`);
     partTables(combinedParts(job.openings).map(p=>({...p,profile:`${COLORS[p.color]}   ${p.profile}`})),true);
@@ -106,10 +124,11 @@ export async function createPDF(job,{combined=false,units='mm'}={}){
       const notes=[o.divisionMode==='split'?'Split tilt-rod mode':'',Number.isFinite(result.gap)?`Light gap ${length(result.gap)} ${units}`:'',o.tposts?`${configuration(o)}; post centerlines ${o.tposts.positions.map(v=>length(v*25.4)).join(', ')} ${units}`:'',...cutSheetNotes(result),o.notes].filter(Boolean);
       if(notes.length)paragraph(`${o.name}: ${notes.join('. ')}`);
     }
+    completionChecklist(job.openings);
   }else for(let index=0;index<results.length;index++){
     const {o,result}=results[index];openingLabel=`${String(index+1).padStart(2,'0')}  ${o.name||'Untitled opening'}`;newPage(openingLabel);
     const top=y;
-    facts(cutSheetFacts(o,result,{length,units}),{w:350,compact:true,dense:result.parts.length>16});
+    facts(cutSheetFacts(o,result,{length,units}),{w:350,compact:true,dense:result.parts.length>12});
     schematic(o,result,397,top,183,Math.min(130,top-y-15));
     y-=5;
     if(o.tposts)paragraph(`${o.tposts.construction==='two-piece'?'Two-piece':'One-piece'} posts. Centerlines from left (${units}): ${o.tposts.positions.map(v=>length(v*25.4)).join('   ')}`);
@@ -117,9 +136,10 @@ export async function createPDF(job,{combined=false,units='mm'}={}){
     partTables(result.parts);
     const machining=[['Hinges from stile end',result.hinges.map(length).join(', ')],...result.machining.map(m=>[machiningLabel(m.label),length(m.value)])];
     ensure(48,'Machining continued');text(`MACHINING (${units})`,margin,y-8,8,bold);y-=16;
-    facts(machining,{columns:machining.length>6?3:2,compact:true,dense:result.parts.length>16});
+    facts(machining,{columns:machining.length>6?3:2,compact:true,dense:result.parts.length>12});
     y-=3;for(const note of cutSheetNotes(result))paragraph(note,{size:8});
     if(o.notes)paragraph(`Shop notes: ${o.notes}`);
+    completionChecklist([o]);
   }
   const pages=pdf.getPages();pages.forEach((p,i)=>{page=p;page.drawLine({start:{x:margin,y:40},end:{x:580,y:40},thickness:.5,color:line});text(`Cut lengths in ${units}`,margin,27,7,regular,muted);text(`${i+1} / ${pages.length}`,550,27,8,regular,muted);});
   return pdf.save();
