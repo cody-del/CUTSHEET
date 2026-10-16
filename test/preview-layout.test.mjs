@@ -7,7 +7,7 @@ import {drawing} from '../public/layouts.js';
 import {printedReferences} from './printed-reference-cases.mjs';
 
 const example={...printedReferences[1].opening,name:'Opening 1',width:71,height:63.375,frame:'ZF',sides:'3W',sizeMethod:'W',divider:25};
-const large={...printedReferences[2].opening,width:150,height:76,divider:30,tposts:{construction:'two-piece',positions:[28,57,89,120],sections:Array.from({length:5},()=>({left:1,right:1}))}};
+const large={...printedReferences[2].opening,width:150,height:76.25,divider:30,tposts:{construction:'two-piece',positions:[28,57,89,120],sections:Array.from({length:5},()=>({left:1,right:1}))}};
 
 test('the divider example renders nine louvers above and six below, inside the stiles',()=>{
   const result=calculate(example),scene=drawing(example,{louverLayout:result.louverLayout});
@@ -42,7 +42,7 @@ test('louver preview counts track source totals for standard, divided, split and
 });
 
 test('all four references, the divider example, and a five-section opening fit one page each',async()=>{
-  const openings=[...printedReferences.map(r=>r.opening),example,large];
+  const openings=[...printedReferences.map(r=>r.opening),{...example,height:63.4},large];
   for(const units of ['mm','in']){
     const pdf=await PDFDocument.load(await createPDF({number:'LAYOUT-TEST',customer:'',openings},{units}));
     assert.equal(pdf.getPageCount(),openings.length);

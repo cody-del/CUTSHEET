@@ -42,7 +42,7 @@ test('split tilt mode is explicit, preserves legacy jobs, and applies the source
 
 test('a split position produces separate rods without drawing or cutting a divider rail',()=>{
   for(const base of [printedReferences[0].opening,printedReferences[3].opening]){
-    const opening={...base,width:base.tposts?base.width:36,height:60,divisionMode:'split',divider:30,tilt:'Front'};
+    const opening={...base,width:base.tposts?base.width:36,height:60.25,divisionMode:'split',divider:30,tilt:'Front'};
     const r=calculate(opening),withRail=calculate({...opening,divisionMode:'divider'});
     assert.deepEqual(r.warnings,[]);
     assert.equal(r.parts.filter(p=>p.name==='Divider rail').length,0);

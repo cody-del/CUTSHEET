@@ -43,7 +43,8 @@ const printedParts=[
 
 test('supplied inside-mount shutter-size trim reference matches all printed cuts, quantities, and machining',()=>{
     const r=calculate(opening);
-    assert.deepEqual(r.warnings,[]);
+    assert.deepEqual(r.warnings,[r.lightGapWarning]);
+    assert.match(r.lightGapWarning,/8.0 mm or above/);
     assert.deepEqual(r.parts.map(p=>[p.name,p.length.toFixed(1),p.quantity]),printedParts);
     assert.deepEqual(r.hinges.map(Math.round),[46,443,840,1238]);
     assert.equal(r.machining.find(m=>m.label==='First louver hole from stile top').value.toFixed(1),'344.3');

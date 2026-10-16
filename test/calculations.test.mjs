@@ -5,7 +5,7 @@ import {WorkbookEngine,parse} from '../engine.mjs';
 import {calculate,combinedParts} from '../calculations.mjs';
 import {createPDF} from '../pdf.mjs';
 import {PDFDocument} from 'pdf-lib';
-const base={name:'Test opening',width:36,height:60,quantity:1,left:1,right:1,frame:'ST',louver:4,mount:'I',sizeMethod:'W',sides:'4W',color:'W',tilt:'Smart',stile:'Flat',divider:0,notes:''};
+const base={name:'Test opening',width:36,height:59.75,quantity:1,left:1,right:1,frame:'ST',louver:4,mount:'I',sizeMethod:'W',sides:'4W',color:'W',tilt:'Smart',stile:'Flat',divider:0,notes:''};
 test('formula engine handles conditional errors, ranges, blank cells, comparisons and rounding',()=>{
  const e=new WorkbookEngine({Sheet:{A1:4,A2:5,B1:'=SUM(A1:A2)',B2:'=IF(A1=4,7,1/0)',B3:'=IF(A9=0,TRUE,FALSE)',B4:'=ROUNDUP(-2.11,1)',B5:'=MOD(-3,2)',B6:'=INT(-2.1)',B7:'=EVEN(3)',B8:'=IF("abc"="ABC",1,0)'}});
  for(const[c,v]of Object.entries({B1:9,B2:7,B3:true,B4:-2.2,B5:1,B6:-3,B7:4,B8:1}))assert.equal(e.cell('Sheet',c),v);
@@ -39,12 +39,12 @@ test('bad inputs, unsupported options, and workbook warnings cannot generate cut
 test('648 representative combinations either calculate valid parts or expose workbook warnings',()=>{
  let allowed=0,blocked=0;
  for(const frame of ['ST','DS','EX','ZF','TR','HS'])for(const width of [24,36,48])for(const height of [36,60,72])for(const louver of [3,4])for(const [left,right]of [[1,0],[1,1],[2,2]])for(const divider of [0,height/2]){
-  const r=calculate({...base,frame,width,height,louver,left,right,divider});if(r.warnings.length){blocked++;continue;}allowed++;for(const p of r.parts){assert.ok(p.length>0&&Number.isFinite(p.length));assert.ok(p.quantity>0&&Number.isInteger(p.quantity));}
+  const r=calculate({...base,frame,width,height,louver,left,right,divider});if(r.warnings.some(w=>w!==r.lightGapWarning)){blocked++;continue;}allowed++;for(const p of r.parts){assert.ok(p.length>0&&Number.isFinite(p.length));assert.ok(p.quantity>0&&Number.isInteger(p.quantity));}
  }
  assert.equal(allowed+blocked,648);assert.ok(allowed>300);assert.ok(blocked>0);
 });
 test('ordinary openings fit one Letter page each; long notes and combined references paginate',async()=>{
- const j={number:'TEST-001',customer:'Example',openings:[base,{...base,name:'Second',height:72}]};
+ const j={number:'TEST-001',customer:'Example',openings:[base,{...base,name:'Second',height:72.5}]};
  const pdf=await PDFDocument.load(await createPDF(j));assert.equal(pdf.getPageCount(),2);assert.equal(pdf.getPage(0).getWidth(),612);assert.equal(pdf.getPage(0).getHeight(),792);
  const long=await PDFDocument.load(await createPDF({...j,openings:[{...base,notes:'Assembly note\n'.repeat(70)}]}));assert.ok(long.getPageCount()>1);
  const combined=await PDFDocument.load(await createPDF({...j,openings:Array.from({length:50},(_,i)=>({...base,name:`Opening ${i+1} with a lengthy room name`}))},{combined:true}));assert.ok(combined.getPageCount()>1);
@@ -69,7 +69,7 @@ test('all fourteen panel arrangements preserve equal sizing and rail/stile quant
 const tpostBase={...base,width:48,tposts:{construction:'two-piece',positions:[24],sections:[{left:1,right:0},{left:0,right:1}]}};
 test('T-post section sizes use the source deductions and react independently to centerline movement',()=>{
  const r=calculate(tpostBase);assert.deepEqual(r.warnings,[]);assert.equal(r.sections.length,2);
- // Independent source deductions for a 48 x 60 opening, standard inside frame, Smart tilt.
+ // Independent source deductions for a 48 x 59.75 opening, standard inside frame, Smart tilt.
  // Opening deduction 1/8 inch; outer frame 25 mm; half post 23 mm; stiles 81 mm;
  // inter-panel allowance 2 mm. Louver cut subtracts 2 x 11.5 mm from rail cut.
  const expectedRail=(24-0.125/2)*25.4-25-23-81-2;
@@ -100,7 +100,7 @@ test('T-post matrix covers 1–4 posts, both constructions, frames, tilts, and d
  let valid=0,warned=0;
  for(const n of [1,2,3,4])for(const construction of ['one-piece','two-piece'])for(const frame of ['ST','DS','EX','ZF','TR','HS'])for(const tilt of ['Smart','Front','Back'])for(const divider of [0,30]){
   const o={...base,frame,tilt,divider,width:(n+1)*20,tposts:{construction,positions:Array.from({length:n},(_,i)=>(i+1)*20),sections:Array.from({length:n+1},()=>({left:1,right:0}))}};
-  const r=calculate(o);if(r.warnings.length){warned++;continue;}valid++;
+  const r=calculate(o);if(r.warnings.some(w=>w!==r.lightGapWarning)){warned++;continue;}valid++;
   assert.equal(r.sections.length,n+1);assert.equal(r.parts.find(p=>p.name.startsWith('T-post')).quantity,n);
   assert.equal(r.parts.filter(p=>p.name.startsWith('Stile')).reduce((sum,p)=>sum+p.quantity,0),(n+1)*2);
   assert.equal(r.parts.filter(p=>p.name==='Top rail').reduce((sum,p)=>sum+p.quantity,0),n+1);
@@ -145,7 +145,7 @@ test('long T-post previews preserve proportions and keep all folds inside their 
  }
 });
 test('T-post openings over 106 inches use source panel and frame limits',async()=>{
- const o={...tpostBase,width:110,height:76,tposts:{construction:'two-piece',positions:[110/3,220/3],sections:Array.from({length:3},()=>({left:1,right:1}))}};
+ const o={...tpostBase,width:110,height:76.25,tposts:{construction:'two-piece',positions:[110/3,220/3],sections:Array.from({length:3},()=>({left:1,right:1}))}};
  assert.deepEqual(calculate(o).warnings,[]);
  const pdf=await PDFDocument.load(await createPDF({number:'WIDE',customer:'Example',openings:[o]}));assert.ok(pdf.getPageCount()>0);
  assert.throws(()=>calculate({...base,width:110}));

@@ -9,7 +9,7 @@ import {shopHandler} from '../shop-api.mjs';
 import {progress,elapsed,schedule,duration} from '../public/shop-state.js';
 import {calculate} from '../calculations.mjs';
 
-const opening={id:'opening-1',name:'Front window',width:36,height:60,quantity:2,left:1,right:1,louver:4,frame:'TR',sides:'4W',mount:'I',sizeMethod:'S',color:'W',tilt:'Back',stile:'Flat',divider:0,notes:''};
+const opening={id:'opening-1',name:'Front window',width:36,height:59.5,quantity:2,left:1,right:1,louver:4,frame:'TR',sides:'4W',mount:'I',sizeMethod:'S',color:'W',tilt:'Back',stile:'Flat',divider:0,notes:''};
 const job={id:'job-1',name:'Workshop test',number:'TEST-001',notes:'Test only',due:'',openings:[opening]};
 const password='test-password-long-enough',secret='test-session-secret-with-more-than-32-characters';
 async function fixture(t,{local=true}={}){
@@ -20,6 +20,12 @@ async function fixture(t,{local=true}={}){
 }
 const ownerCookie=async service=>({owner:(await service.run('login',{password})).token});
 async function paired(service,cookie){const {code}=await service.run('pairing',{name:'Saw iPad'},cookie);return {shop:(await service.run('pair',{code})).token};}
+
+test('a light gap outside the shop limits cannot be released',async t=>{
+  const {service}=await fixture(t);
+  for(const height of [60,52.5])await assert.rejects(service.run('publish',{job:{...job,openings:[{...opening,height}]}}),/The light gap is not going to work/);
+  assert.equal((await service.run('jobs')).jobs.length,0);
+});
 
 test('release uses original calculations and freezes the cut sheet',async t=>{
   const {service}=await fixture(t),{job:released}=await service.run('publish',{job,targetMinutes:90});
